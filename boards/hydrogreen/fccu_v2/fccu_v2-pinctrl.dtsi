@@ -112,7 +112,7 @@
 	ledc0_default: ledc0_default {
 		group1 {
 			pinmux = <LEDC_CH0_GPIO37>,
-					 <LEDC_CH1_GPIO2>,
+					 <LEDC_CH1_GPIO17>,
 					 <LEDC_CH2_GPIO4>;
 			output-enable;
 		};

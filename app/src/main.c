@@ -1,6 +1,6 @@
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
-#include <stdio.h> // Include for printk
+#include <stdio.h>
 #include "can.h"
 #include <zephyr/device.h>
 #include <zephyr/drivers/can.h>
@@ -12,19 +12,13 @@
 
 LOG_MODULE_REGISTER(app);
 
-// fccu_device_t fccu;
-
 int main() {
-    printf("Starting program on board: %s\n", CONFIG_BOARD);
+    LOG_INF("Starting program on board: %s\n", CONFIG_BOARD);
 
-    // fccu_init(&fccu);
-
+    fccu_init();
 
     while (1) {
-        //fccu_on_tick(&fccu);
-
-
-
+        fccu_on_tick();
     }
     return 0;
 }
