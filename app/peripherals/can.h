@@ -11,7 +11,8 @@
 #include "can_ids.h"
 #include <stdio.h>
 
-int can_send_(const struct device *can_dev, uint8_t id, uint8_t *data, uint8_t data_len);
+int can_send_(const struct device *can_dev, uint16_t id, uint8_t *data, uint8_t data_len);
 int can_init(const struct device *can_dev, uint32_t baudrate);
+int can_send_float(const struct device *can_dev, uint16_t id, float value);
 
 #endif //CAN_H

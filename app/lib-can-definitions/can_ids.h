@@ -1,7 +1,7 @@
 #ifndef CAN_IDS_H
 #define CAN_IDS_H
 
-typedef enum can_id_t {
+typedef enum can_ids {
     CAN_ID_TIME = 0x100,
     CAN_ID_TIME_BEFORE_TRANSMIT = 0x101,
 

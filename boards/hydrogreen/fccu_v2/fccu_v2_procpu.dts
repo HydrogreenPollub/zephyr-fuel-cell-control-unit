@@ -182,6 +182,7 @@
 	pinctrl-0 = <&twai_default>;
 	pinctrl-names = "default";
 	status = "okay";
+//	bus-speed = <500000>;
 };
 
 &timer0 {
@@ -238,14 +239,14 @@
 
 	channel@6 {
 		reg = <6>;
-		zephyr,gain = "ADC_GAIN_1";
+		zephyr,gain = "ADC_GAIN_1_4";
 		zephyr,reference = "ADC_REF_INTERNAL";
 		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
 		zephyr,resolution = <12>;
 	};
 	channel@7 {
 		reg = <7>;
-		zephyr,gain = "ADC_GAIN_1";
+		zephyr,gain = "ADC_GAIN_1_4";
 		zephyr,reference = "ADC_REF_INTERNAL";
 		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
 		zephyr,resolution = <12>;

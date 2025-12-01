@@ -179,6 +179,8 @@ static void cooldown_expired(struct k_work *work)
     if (gpio_pin_get_dt(&button.button) == 0) {
         flags.start_button_pressed = true;
         printf("Button pressed at %" PRIu32 "\n", k_cycle_get_32());
+        fccu_purge_valve_on();
+
     }
 
 }
@@ -218,7 +220,6 @@ void fccu_start_button_init() {
 }
 
 void fccu_bmp280_sensor_init() {
-
     if (sensor.sensor == NULL) {
         LOG_ERR("\nError: no device found.\n");
         return;
@@ -255,7 +256,7 @@ void fccu_init() {
     flags.purge_valve_on = false;
     fccu_adc_init();
     ads1015_init(&ads1015_device);
-    // // fccu_can_init();
+    fccu_can_init();
     fccu_valves_init();
     fccu_fan_init();
     fccu_counters_init();
@@ -265,38 +266,116 @@ void fccu_init() {
     // fccu_current_driver_init();
     // fccu_current_driver_enable();
 }
+#define ADC_60V_VOLTAGE_COEFF_COUNT  4
+
+float adc_60v_coefficients[ADC_60V_VOLTAGE_COEFF_COUNT]
+    = { 5.3058557971105280e-001, 1.3584515496399828e-002, 4.6881367335382515e-007, -2.7055002170240227e-010 };
+
+float adc_apply_calibration(float coefficients[], uint8_t coeff_count, float adc_raw_sample)
+{
+    float result = 0;
+    for (int i = 0; i < coeff_count; i++)
+    {
+        result += coefficients[i] * pow(adc_raw_sample, i);
+    }
+
+    return result;
+}
+
+#define FILTER_SIZE 10
+
+float moving_average_reject_minmax(float new_value) {
+    static float buffer[FILTER_SIZE] = {0};
+    static int index = 0;
+    static int filled = 0;
+    buffer[index] = new_value;
+    index = (index + 1) % FILTER_SIZE;
+
+    if (filled < FILTER_SIZE) filled++;
+
+    if (filled < FILTER_SIZE) {
+        float sum = 0;
+        for (int i = 0; i < filled; i++) sum += buffer[i];
+        LOG_INF("Zwracam srednia");
+        return sum / filled;
+    }
+
+    float sum = 0;
+    float min = buffer[0];
+    float max = buffer[0];
+
+    for (int i = 0; i < FILTER_SIZE; i++) {
+        float v = buffer[i];
+        sum += v;
+        if (v < min) min = v;
+        if (v > max) max = v;
+    }
+
+    sum -= min;
+    sum -= max;
+
+    return sum / (FILTER_SIZE - 2);
+}
 
 void fccu_adc_read() {
+
     adc_read_(&adc.low_pressure_sensor.adc_channel, &adc.low_pressure_sensor.raw_value);
+
     adc_read_(&adc.fuel_cell_voltage.adc_channel, &adc.fuel_cell_voltage.raw_value);
+    adc.fuel_cell_voltage.voltage = adc_map((float)adc.fuel_cell_voltage.raw_value, 1.0f, 2853.8f, 0.4f, 52.0f);
+
     adc_read_(&adc.supercap_voltage.adc_channel, &adc.supercap_voltage.raw_value);
-    adc.supercap_voltage.voltage = adc_map((float)adc.supercap_voltage.raw_value, 0.0f, 2862.0f, 0.5f, 51.0f);
+
+    adc.supercap_voltage.voltage = adc_map((float)adc.supercap_voltage.raw_value, 1.0f, 2853.8f, 0.4f, 52.0f);
+     adc.supercap_voltage.voltage = moving_average_reject_minmax(adc.supercap_voltage.voltage);
+    // adc.supercap_voltage.voltage = adc_apply_calibration(adc_60v_coefficients, ADC_60V_VOLTAGE_COEFF_COUNT, adc.supercap_voltage.raw_value);
     adc_read_(&adc.temp_sensor.adc_channel, &adc.temp_sensor.raw_value);
     int32_t val = (int32_t)adc.temp_sensor.raw_value;
     adc_raw_to_millivolts_dt(&adc.temp_sensor.adc_channel, &val);
-    adc.temp_sensor.voltage = (float)val / 1000.0f;
+    adc.temp_sensor.voltage = (float)val * 1000.0f;
     float Vcc = 3.3f;
-    float R = 10000.0f;
-    float R_ntc = (R *  (Vcc - adc.temp_sensor.voltage)) / adc.temp_sensor.voltage;
+    float R = 1000.0f;
+    float R_ntc = (R *  adc.temp_sensor.voltage) / (Vcc - adc.temp_sensor.voltage);
 
     float T0 = 298.15f; // 25°C w kelwinach
     float R0 = 1000.0f; // 1kΩ przy 25°C
-    float B = 3450.0f;
+    float B = 3950.0f;
 
-    float tempK = 1.0f / ((1.0f / T0) + (1.0f / B) * logf(R_ntc / R0));
+    float tempK = 1.0f / ((1.0f / T0) + (1.0f / B) * log(R_ntc / R0));
     float tempC = tempK - 273.15f;
-    LOG_INF("Low pressure sensor: %d, Fuel cell voltage: %d, Supercap voltage: %.3f, Temperature: %.3f\n", adc.low_pressure_sensor.raw_value, adc.fuel_cell_voltage.raw_value, \
-      adc.supercap_voltage.voltage, tempC);
+    LOG_INF("Low pressure sensor: %d, Fuel cell voltage: %.3f, Supercap voltage: %.3f, Temperature: %.d", adc.low_pressure_sensor.raw_value, adc.fuel_cell_voltage.voltage, adc.supercap_voltage.voltage, adc.temp_sensor.raw_value);
+    can_send_float(can.can_device, 0x104, adc.fuel_cell_voltage.voltage);
+    // can_send_float(can.can_device, CAN_ID_SC_VOLTAGE, adc.supercap_voltage.voltage);
 }
 
+float read_temperature(float adc_voltage) {
+    const float VCC = 1.88f;
+    const float R_FIXED = 1000.0f;
+    const float R0 = 1000.0f;
+    const float BETA = 3950.0f;
+    const float T0 = 298.15f;  // 25°C w Kelvinach
+
+    // 1. oblicz rezystancję NTC
+    float R_ntc = R_FIXED * adc_voltage / (VCC - adc_voltage);
+
+    // 2. równanie Beta
+    float invT = (1.0f / T0) + (1.0 / BETA) * log(R_ntc / R0);
+
+    float T = (1.0f / invT) - 273.15; // °C
+    return T;
+}
 void fccu_ads1015_read() {
     ads1015_data.fuel_cell_current = ads1015_read_channel_single_shot(&ads1015_device, 0);
-    ads1015_data.fuel_cell_current = adc_map(ads1015_data.fuel_cell_current, 1.508f, 1.432f, 0, 5); // Current sensor: 0-25A
+    ads1015_data.fuel_cell_current = adc_map(ads1015_data.fuel_cell_current, 1.494f, 0.484f, 0, 21); // Current sensor: 0-25A
+    ads1015_data.fuel_cell_voltage = ads1015_read_channel_single_shot(&ads1015_device, 1);
+    ads1015_data.fuel_cell_voltage = read_temperature(ads1015_data.fuel_cell_voltage);
+
     ads1015_data.high_pressure_sensor = ads1015_read_channel_single_shot(&ads1015_device, 2);
     ads1015_data.low_pressure_sensor = ads1015_read_channel_single_shot(&ads1015_device, 3);
-    LOG_INF("Fuel cell current: %.2f A, High_pressure: %.2f, Low_pressure: %.2f\n", ads1015_data.fuel_cell_current, ads1015_data.high_pressure_sensor, \
+    LOG_INF("Fuel cell current: %.4f A, temperature: %.2f oC, High_pressure: %.2f, Low_pressure: %.2f\n", ads1015_data.fuel_cell_current, ads1015_data.fuel_cell_voltage, ads1015_data.high_pressure_sensor, \
         ads1015_data.low_pressure_sensor);
 }
+
 
 void fccu_on_tick() {
 
@@ -318,11 +397,11 @@ void fccu_on_tick() {
             fccu_fan_pwm_set(fan_pwm_percent);
         }
         if (flags.compare_fuel_cell_voltage && (!flags.purge_valve_on)) {
-            if (last_fuel_cell_voltage - adc.supercap_voltage.voltage >= FC_V_PURGE_TRIGGER_DIFFERENCE) {
+            if (last_fuel_cell_voltage - adc.fuel_cell_voltage.voltage >= FC_V_PURGE_TRIGGER_DIFFERENCE) {
                 fccu_purge_valve_on();
             }
             flags.compare_fuel_cell_voltage = false;
-            last_fuel_cell_voltage = adc.supercap_voltage.voltage;
+            last_fuel_cell_voltage = adc.fuel_cell_voltage.voltage;
         }
 
         if (sensor.temperature >= FC_V_MAX_TEMPERATURE) {
@@ -332,8 +411,6 @@ void fccu_on_tick() {
 
     }
     // int8_t current_driver_pwm = 10;
-
-
     // fccu_current_driver_set_pwm(&fccu->current_driver, current_driver_pwm);
     // // fccu_fan_pwm_set(&fccu->fan, current_driver_pwm);
     // fccu->ads1015_data.fuel_cell_current = ads1015_read_channel_single_shot(&fccu->ads1015_device, 0);

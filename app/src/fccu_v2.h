@@ -37,6 +37,7 @@ typedef struct {
     float low_pressure_sensor;
     float high_pressure_sensor;
     float fuel_cell_current;
+    float fuel_cell_voltage;
 }ads1015_adc_data_t;
 
 typedef struct {

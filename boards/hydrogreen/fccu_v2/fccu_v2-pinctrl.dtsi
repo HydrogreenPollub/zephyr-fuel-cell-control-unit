@@ -92,8 +92,12 @@
 
 	twai_default: twai_default {
 		group1 {
-			pinmux = <TWAI_TX_GPIO40>,
-					 <TWAI_RX_GPIO39>;
+			pinmux = <TWAI_RX_GPIO40>;
+			output-high; /* Drive TX High (Recessive) by default */
+		};
+		group2 {
+			pinmux = <TWAI_TX_GPIO39>;
+			bias-pull-up; /* CRITICAL: Keep RX high to prevent float errors */
 		};
 	};
 
