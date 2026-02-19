@@ -1,3 +1,3 @@
-[submodule "lib-can-definitions"]
-    path = can-definitions
-    url = https://github.com/HydrogreenPollub/lib-can-definitions.git
+[submodule "can-definitions"]
+	path = can-definitions
+	url = https://github.com/HydrogreenPollub/lib-can-definitions.git
