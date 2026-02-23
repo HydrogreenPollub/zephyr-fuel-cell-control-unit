@@ -1,4 +1,5 @@
 #include "pwm.h"
+#include <stdio.h>
 
 void pwm_init(struct pwm_dt_spec *pwm) {
     if (!pwm_is_ready_dt(pwm)) {

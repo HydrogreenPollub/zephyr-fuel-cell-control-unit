@@ -43,6 +43,8 @@
 
 	buttons {
 		compatible = "gpio-keys";
+		debounce-interval-ms = <100>;
+		
 		button_start0: button_start_0 {
 			gpios = <&gpio0 11 (GPIO_ACTIVE_LOW)>;
 			label = "start button internal";

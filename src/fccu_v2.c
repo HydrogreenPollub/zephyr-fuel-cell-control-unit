@@ -1,5 +1,11 @@
 #include "fccu_v2.h"
 
+#include <math.h>
+
+#include "ads1015.h"
+#include "can.h"
+#include "counter.h"
+
 LOG_MODULE_REGISTER(fccu);
 
 uint8_t fan_pwm_percent = 0;
@@ -11,7 +17,7 @@ volatile fccu_state_t state = STOPPED;
 ads1015_type_t ads1015_device;
 ads1015_adc_data_t ads1015_data;
 
- fccu_valve_pin_t valve_pin = {
+fccu_valve_pin_t valve_pin = {
     .main_valve_on_pin = GPIO_DT_SPEC_GET(DT_ALIAS(main_valve_pin), gpios),
     .purge_valve_on_pin = GPIO_DT_SPEC_GET(DT_ALIAS(purge_valve_pin), gpios),
 };
@@ -23,12 +29,12 @@ fccu_adc_t adc = {
     .temp_sensor.adc_channel = ADC_DT_SPEC_GET_BY_IDX(DT_PATH(zephyr_user), 3),
 };
 
- fccu_fan_t fan = {
+fccu_fan_t fan = {
     .fan_on_pin = GPIO_DT_SPEC_GET(DT_ALIAS(fan_pin), gpios),
     .fan_pwm = PWM_DT_SPEC_GET(DT_ALIAS(fan_pwm)),
 };
 
- fccu_can_t can = {
+fccu_can_t can = {
     .can_device = DEVICE_DT_GET(DT_ALIAS(can)),
     .can_status_led = GPIO_DT_SPEC_GET(DT_ALIAS(can_led), gpios),
 };
@@ -56,8 +62,7 @@ fccu_counter_t counter = {
 
 static struct k_work_delayable purge_valve_off_work;
 
-void fccu_purge_valve_off(struct k_work *work)
-{
+void fccu_purge_valve_off(struct k_work *work) {
     ARG_UNUSED(work);
     gpio_reset(&valve_pin.purge_valve_on_pin);
     flags.purge_valve_on = false;
@@ -125,7 +130,6 @@ void fccu_can_init() {
 }
 
 void fccu_current_driver_init() {
-
     gpio_init(&current_driver.driver_enable_pin, GPIO_OUTPUT_INACTIVE);
     pwm_init(&current_driver.driver_pwm);
 }
@@ -137,20 +141,18 @@ void fccu_counters_init() {
     counter_init(counter.counter3);
 }
 
-static void counter_alarm_callback_measurements(const struct device *dev, void *user_data)
-{
+static void counter_alarm_callback_measurements(const struct device *dev, void *user_data) {
     // if (flags.start_button_pressed == true) {
-    if (state == RUNNING){
+    if (state == RUNNING) {
         flags.measurements_tick = true;
-        LOG_INF("Counter0 alarm triggered! \n");
+        LOG_INF("Counter0 alarm triggered!");
     }
 }
 
-static void counter_alarm_callback_fuel_cell_voltage_check(const struct device *dev, void *user_data)
-{
+static void counter_alarm_callback_fuel_cell_voltage_check(const struct device *dev, void *user_data) {
     if (state == RUNNING) {
         flags.compare_fuel_cell_voltage = true;
-        LOG_INF("Counter1 alarm triggered! \r\n");
+        LOG_INF("Counter1 alarm triggered!");
     }
 }
 
@@ -167,46 +169,49 @@ static void counter_alarm_callback_fuel_cell_voltage_check(const struct device *
 
 void fccu_counters_set_interrupts() {
     counter_set_alarm(counter.counter_measurements, 0, counter_alarm_callback_measurements, 1000000);
-    counter_set_alarm(counter.counter_fuel_cell_voltage_check, 0, counter_alarm_callback_fuel_cell_voltage_check, 30000000);
+    counter_set_alarm(counter.counter_fuel_cell_voltage_check, 0, counter_alarm_callback_fuel_cell_voltage_check,
+                      30000000);
     // counter_set_alarm(counter.counter2, 0, counter_alarm_callback2, 3000000);
     // counter_set_alarm(counter.counter3, 0, counter_alarm_callback3, 4000000);
 }
 
-static void cooldown_expired(struct k_work *work)
-{
+static void cooldown_expired(struct k_work *work) {
     ARG_UNUSED(work);
 
     if (gpio_pin_get_dt(&button.button) == 0) {
         flags.start_button_pressed = true;
         printf("Button pressed at %" PRIu32 "\n", k_cycle_get_32());
         fccu_purge_valve_on();
-
     }
 
+    gpio_pin_interrupt_configure_dt(&button.button, GPIO_INT_EDGE_TO_ACTIVE);
 }
+
 static K_WORK_DELAYABLE_DEFINE(cooldown_work, cooldown_expired);
 
 void button_pressed(const struct device *dev, struct gpio_callback *cb,
-            uint32_t pins)
-{
-    k_work_reschedule(&cooldown_work, K_MSEC(1000));
+                    uint32_t pins) {
+    LOG_INF("Test button pressed");
+
+    gpio_pin_interrupt_configure_dt(&button.button, GPIO_INT_DISABLE);
+    k_work_reschedule(&cooldown_work, K_MSEC(100));
 }
 
-static void cooldown_expired1(struct k_work *work)
-{
+static void cooldown_expired1(struct k_work *work) {
     ARG_UNUSED(work);
 
     if (gpio_pin_get_dt(&button.button_external) == 1) {
         flags.start_button_pressed = true;
         printf("Button pressed at %" PRIu32 "\n", k_cycle_get_32());
     }
-
 }
+
 static K_WORK_DELAYABLE_DEFINE(cooldown_work1, cooldown_expired1);
 
 void button_pressed1(const struct device *dev, struct gpio_callback *cb,
-            uint32_t pins)
-{
+                     uint32_t pins) {
+    printf("Button1 pressed (printf) \n");
+    LOG_INF("Button1 pressed (LOG_INF)");
     k_work_reschedule(&cooldown_work1, K_MSEC(1000));
 }
 
@@ -247,7 +252,8 @@ void fccu_bmp280_sensor_read() {
     sensor.pressure = sensor_value_to_float(&sensor.pressure_buffer) * 10.0f;
     sensor.humidity = sensor_value_to_float(&sensor.humidity_buffer);
 
-    LOG_INF("Temperature: %.2f C, Pressure: %.2f hPa, Humidity: %.2f RH\n", (double)sensor.temperature, (double)sensor.pressure, (double)sensor.humidity);
+    LOG_INF("Temperature: %.2f C, Pressure: %.2f hPa, Humidity: %.2f RH", (double)sensor.temperature,
+            (double)sensor.pressure, (double)sensor.humidity);
 }
 
 void fccu_init() {
@@ -266,17 +272,16 @@ void fccu_init() {
     // fccu_current_driver_init();
     // fccu_current_driver_enable();
 }
+
 #define ADC_60V_VOLTAGE_COEFF_COUNT  4
 
 float adc_60v_coefficients[ADC_60V_VOLTAGE_COEFF_COUNT]
-    = { 5.3058557971105280e-001, 1.3584515496399828e-002, 4.6881367335382515e-007, -2.7055002170240227e-010 };
+        = {5.3058557971105280e-001, 1.3584515496399828e-002, 4.6881367335382515e-007, -2.7055002170240227e-010};
 
-float adc_apply_calibration(float coefficients[], uint8_t coeff_count, float adc_raw_sample)
-{
+float adc_apply_calibration(float coefficients[], uint8_t coeff_count, float adc_raw_sample) {
     float result = 0;
-    for (int i = 0; i < coeff_count; i++)
-    {
-        result += coefficients[i] * pow(adc_raw_sample, i);
+    for (int i = 0; i < coeff_count; i++) {
+        result += coefficients[i] * powf(adc_raw_sample, i);
     }
 
     return result;
@@ -318,32 +323,34 @@ float moving_average_reject_minmax(float new_value) {
 }
 
 void fccu_adc_read() {
-
     adc_read_(&adc.low_pressure_sensor.adc_channel, &adc.low_pressure_sensor.raw_value);
 
     adc_read_(&adc.fuel_cell_voltage.adc_channel, &adc.fuel_cell_voltage.raw_value);
-    adc.fuel_cell_voltage.voltage = adc_map((float)adc.fuel_cell_voltage.raw_value, 1.0f, 2853.8f, 0.4f, 52.0f);
+    adc.fuel_cell_voltage.voltage = adc_map((float) adc.fuel_cell_voltage.raw_value, 1.0f, 2853.8f, 0.4f, 52.0f);
 
     adc_read_(&adc.supercap_voltage.adc_channel, &adc.supercap_voltage.raw_value);
 
-    adc.supercap_voltage.voltage = adc_map((float)adc.supercap_voltage.raw_value, 1.0f, 2853.8f, 0.4f, 52.0f);
-     adc.supercap_voltage.voltage = moving_average_reject_minmax(adc.supercap_voltage.voltage);
+    adc.supercap_voltage.voltage = adc_map((float) adc.supercap_voltage.raw_value, 1.0f, 2853.8f, 0.4f, 52.0f);
+    adc.supercap_voltage.voltage = moving_average_reject_minmax(adc.supercap_voltage.voltage);
     // adc.supercap_voltage.voltage = adc_apply_calibration(adc_60v_coefficients, ADC_60V_VOLTAGE_COEFF_COUNT, adc.supercap_voltage.raw_value);
     adc_read_(&adc.temp_sensor.adc_channel, &adc.temp_sensor.raw_value);
-    int32_t val = (int32_t)adc.temp_sensor.raw_value;
+    int32_t val = (int32_t) adc.temp_sensor.raw_value;
     adc_raw_to_millivolts_dt(&adc.temp_sensor.adc_channel, &val);
-    adc.temp_sensor.voltage = (float)val * 1000.0f;
+    adc.temp_sensor.voltage = (float) val * 1000.0f;
     float Vcc = 3.3f;
     float R = 1000.0f;
-    float R_ntc = (R *  adc.temp_sensor.voltage) / (Vcc - adc.temp_sensor.voltage);
+    float R_ntc = (R * adc.temp_sensor.voltage) / (Vcc - adc.temp_sensor.voltage);
 
     float T0 = 298.15f; // 25°C w kelwinach
     float R0 = 1000.0f; // 1kΩ przy 25°C
     float B = 3950.0f;
 
-    float tempK = 1.0f / ((1.0f / T0) + (1.0f / B) * log(R_ntc / R0));
-    float tempC = tempK - 273.15f;
-    LOG_INF("Low pressure sensor: %d, Fuel cell voltage: %.3f, Supercap voltage: %.3f, Temperature: %.d", adc.low_pressure_sensor.raw_value, adc.fuel_cell_voltage.voltage, adc.supercap_voltage.voltage, adc.temp_sensor.raw_value);
+    float tempK = 1.0f / ((1.0f / T0) + (1.0f / B) * logf(R_ntc / R0));
+    //float tempC = tempK - 273.15f;
+    LOG_INF("Low pressure sensor: %d, Fuel cell voltage: %.3f, Supercap voltage: %.3f, Temperature: %d",
+            (int) adc.low_pressure_sensor.raw_value, (double) adc.fuel_cell_voltage.voltage,
+            (double) adc.supercap_voltage.voltage,
+            (int) adc.temp_sensor.raw_value);
     can_send_float(can.can_device, 0x104, adc.fuel_cell_voltage.voltage);
     // can_send_float(can.can_device, CAN_ID_SC_VOLTAGE, adc.supercap_voltage.voltage);
 }
@@ -353,34 +360,36 @@ float read_temperature(float adc_voltage) {
     const float R_FIXED = 1000.0f;
     const float R0 = 1000.0f;
     const float BETA = 3950.0f;
-    const float T0 = 298.15f;  // 25°C w Kelvinach
+    const float T0 = 298.15f; // 25°C w Kelvinach
 
     // 1. oblicz rezystancję NTC
     float R_ntc = R_FIXED * adc_voltage / (VCC - adc_voltage);
 
     // 2. równanie Beta
-    float invT = (1.0f / T0) + (1.0 / BETA) * log(R_ntc / R0);
+    float invT = (1.0f / T0) + (1.0f / BETA) * logf(R_ntc / R0);
 
-    float T = (1.0f / invT) - 273.15; // °C
+    float T = (1.0f / invT) - 273.15f; // °C
     return T;
 }
+
 void fccu_ads1015_read() {
     ads1015_data.fuel_cell_current = ads1015_read_channel_single_shot(&ads1015_device, 0);
-    ads1015_data.fuel_cell_current = adc_map(ads1015_data.fuel_cell_current, 1.494f, 0.484f, 0, 21); // Current sensor: 0-25A
+    ads1015_data.fuel_cell_current = adc_map(ads1015_data.fuel_cell_current, 1.494f, 0.484f, 0, 21);
+    // Current sensor: 0-25A
     ads1015_data.fuel_cell_voltage = ads1015_read_channel_single_shot(&ads1015_device, 1);
     ads1015_data.fuel_cell_voltage = read_temperature(ads1015_data.fuel_cell_voltage);
 
     ads1015_data.high_pressure_sensor = ads1015_read_channel_single_shot(&ads1015_device, 2);
     ads1015_data.low_pressure_sensor = ads1015_read_channel_single_shot(&ads1015_device, 3);
-    LOG_INF("Fuel cell current: %.4f A, temperature: %.2f oC, High_pressure: %.2f, Low_pressure: %.2f\n", ads1015_data.fuel_cell_current, ads1015_data.fuel_cell_voltage, ads1015_data.high_pressure_sensor, \
-        ads1015_data.low_pressure_sensor);
+    LOG_INF("Fuel cell current: %.4f A, temperature: %.2f oC, High_pressure: %.2f, Low_pressure: %.2f\n",
+            (double) ads1015_data.fuel_cell_current, (double) ads1015_data.fuel_cell_voltage,
+            (double) ads1015_data.high_pressure_sensor,
+            (double) ads1015_data.low_pressure_sensor);
 }
 
 
 void fccu_on_tick() {
-
-
-    if (flags.start_button_pressed == true){
+    if (flags.start_button_pressed == true) {
         state = RUNNING;
         if (flags.measurements_tick == true) {
             fccu_bmp280_sensor_read();
@@ -408,7 +417,6 @@ void fccu_on_tick() {
             fan_pwm_percent = 100;
             fccu_fan_pwm_set(fan_pwm_percent);
         }
-
     }
     // int8_t current_driver_pwm = 10;
     // fccu_current_driver_set_pwm(&fccu->current_driver, current_driver_pwm);
@@ -436,4 +444,3 @@ void fccu_on_tick() {
     // }
     k_msleep(100);
 }
-
