@@ -5,6 +5,7 @@
     </openocd>
     <method v="2">
       <option name="CLION.COMPOUND.BUILD" enabled="true" />
+      <option name="RunConfigurationTask" enabled="true" run_configuration_name="flash" run_configuration_type="CMakeRunConfiguration" />
     </method>
   </configuration>
 </component>
