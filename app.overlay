@@ -4,7 +4,3 @@
 		zephyr,shell-uart = &usb_serial;
 	};
 };
-
-&usb_serial {
-	status = "okay";
-};

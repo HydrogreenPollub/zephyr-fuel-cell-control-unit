@@ -17,7 +17,6 @@ int adc_init(const struct adc_dt_spec *adc/*, struct adc_sequence *sequence, int
 }
 
 int adc_read_(const struct adc_dt_spec *adc, int16_t *buffer) {
-
     struct adc_sequence sequence = {
         .channels = BIT(adc->channel_id),
         .buffer = buffer,
@@ -34,7 +33,6 @@ int adc_read_(const struct adc_dt_spec *adc, int16_t *buffer) {
     return 0;
 }
 
-float adc_map(float x, float in_min, float in_max, float out_min, float out_max)
-{
+float adc_map(float x, float in_min, float in_max, float out_min, float out_max) {
     return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }

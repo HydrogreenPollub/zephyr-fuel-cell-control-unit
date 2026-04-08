@@ -106,6 +106,7 @@ typedef struct
 
 typedef struct
 {
+    const struct i2c_dt_spec *i2c;
     uint16_t i2c_addr;
     ads1015_config_t config;
     ads1015_comp_t comparator;

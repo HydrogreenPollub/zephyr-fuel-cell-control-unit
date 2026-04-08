@@ -1,8 +1,5 @@
 #include "ads1015.h"
 
-#define ADS_NODE DT_NODELABEL(ads1015)
-static const struct i2c_dt_spec ads_i2c = I2C_DT_SPEC_GET(ADS_NODE);
-
 void ads1015_init(ads1015_type_t* ads1015_dev)
 {
     ads1015_dev->i2c_addr = ADS1015_I2C_ADDRESS;
@@ -28,13 +25,13 @@ void ads1015_write_reg(ads1015_type_t* ads1015_dev, uint8_t reg, uint8_t* data, 
 
     memcpy(&data_wr[1], data, data_len);
 
-    i2c_write_dt(&ads_i2c, data_wr, data_len + 1);
+    i2c_write_dt(ads1015_dev->i2c, data_wr, data_len + 1);
 }
 
 void ads1015_read_reg(ads1015_type_t* ads1015_dev, uint8_t reg, uint8_t* data_read, size_t data_len)
 {
     uint8_t data_wr = reg;
-    i2c_write_read_dt(&ads_i2c, &data_wr, 1, data_read, data_len);
+    i2c_write_read_dt(ads1015_dev->i2c, &data_wr, 1, data_read, data_len);
 }
 
 int16_t ads1015_read_channel_raw_single_shot(ads1015_type_t* ads1015_dev, ads1015_adc_channel_t channel)

@@ -2,7 +2,6 @@
 
 #include <espressif/esp32s3/esp32s3_wroom_n8.dtsi>
 #include "fccu_v2-pinctrl.dtsi"
-#include <zephyr/dt-bindings/input/input-event-codes.h>
 #include <espressif/partitions_0x0_amp.dtsi>
 
 
@@ -14,15 +13,14 @@
 		i2c-0 = &i2c0;
 		watchdog0 = &wdt0;
 		uart-0 = &uart0;
-		button-start = &button_start0;
-		button-start-external = &button_start1;
 		can = &twai;
 		fan-pin = &fan0;
 		fan-pwm = &fan_pwm0;
+		fan-tacho = &fan_tacho0;
 		main-valve-pin = &main_valve0;
 		purge-valve-pin = &purge_valve0;
 		adc-1 = &adc0;
-		can-led = &can_led0;
+		can-status-led = &can_led0;
 		counter0 = &counter0;
 		counter1 = &counter1;
 		counter2 = &counter2;
@@ -41,74 +39,60 @@
 		zephyr,canbus = &twai;
 	};
 
-	buttons {
-		compatible = "gpio-keys";
-		debounce-interval-ms = <100>;
-		
-		button_start0: button_start_0 {
-			gpios = <&gpio0 11 (GPIO_ACTIVE_LOW)>;
-			label = "start button internal";
-			zephyr,code = <INPUT_KEY_0>;
-		};
-		button_start1: button_start_1 {
-			gpios = <&gpio0 1 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-			label = "start button external";
-			zephyr,code = <INPUT_KEY_0>;
-		};
-	};
 
-	can_status_led{
+	status_leds {
 		compatible = "gpio-leds";
-		can_led0:can_led_0{
+
+		can_led0: can_led_0 {
 			gpios = <&gpio0 12 GPIO_ACTIVE_HIGH>;
+			label = "CAN status LED";
 		};
 	};
-	fan_on{
+
+	gpio_outputs {
 		compatible = "gpio-leds";
-		fan0:fan_0{
-			label = "fan on pin";
+
+		fan0: fan_0 {
 			gpios = <&gpio1 38 GPIO_ACTIVE_HIGH>;
+			label = "fan on pin";
 		};
-	};
-	main_valve_on{
-		compatible = "gpio-leds";
-		main_valve0:main_valve_0{
-			label = "main valve on pin";
+		main_valve0: main_valve_0 {
 			gpios = <&gpio1 46 GPIO_ACTIVE_HIGH>;
+			label = "main valve on pin";
 		};
-	};
-
-	purge_valve_on{
-		compatible = "gpio-leds";
-		purge_valve0:purge_valve_0{
-			label = "purge valve on pin";
+		purge_valve0: purge_valve_0 {
 			gpios = <&gpio1 45 GPIO_ACTIVE_HIGH>;
+			label = "purge valve on pin";
 		};
-	};
-
-	driver_enable{
-		compatible = "gpio-leds";
-		driver_enable0:driver_enable_0{
-			label = "driver enable pin";
+		driver_enable0: driver_enable_0 {
 			gpios = <&gpio0 21 GPIO_ACTIVE_HIGH>;
+			label = "driver enable pin";
 		};
 	};
 
+	gpio_inputs {
+		fan_tacho0: fan_tacho_0 {
+			gpios = <&gpio1 36 GPIO_ACTIVE_HIGH>;
+			label = "fan tacho";
+		};
+	};
 
 	zephyr,user {
-		io-channels = <&adc0 6>, <&adc0 7>, <&adc0 8>, <&adc0 9>, <&ads1015 0>, <&ads1015 1>, <&ads1015 2>,<&ads1015 3>;
+		io-channels = <&adc0 6>, <&adc0 7>, <&adc0 8>, <&adc0 9>, <&adc0 10>;
+		button-onboard-gpios  = <&gpio0 1  (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+		button-external-gpios = <&gpio0 11 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
 	};
 
-	pwm_leds{
+	pwm_leds {
 		compatible = "pwm-leds";
-		fan_pwm0:pwm_pwm_0{
+
+		fan_pwm0: fan_pwm_0 {
 			pwms = <&ledc0 0 40000 0>;
 		};
-		driver_pwm0:driver_pwm_0{
+		driver_pwm0: driver_pwm_0 {
 			pwms = <&ledc0 1 40000 0>;
 		};
 	};
-
 };
 
 &usb_serial {
@@ -136,21 +120,36 @@
 	pinctrl-names = "default";
 	status = "okay";
 
-
-	bme280@76 {
+	bme280_76: bme280@76 {
 		compatible = "bosch,bme280";
 		reg = <0x76>;
 		status = "okay";
 	};
 
-	ads1015:ads1015@48 {
+	bme280_77: bme280@77 {
+		compatible = "bosch,bme280";
+		reg = <0x77>;
+		status = "okay";
+	};
+
+	ads1015_48: ads1015@48 {
 		compatible = "ti,ads1015";
 		reg = <0x48>;
-		label = "ADS1015";
+		label = "ADS1015_48";
 		#io-channel-cells = <1>;
 		#address-cells = <1>;
 		#size-cells = <0>;
-		status = "okay";
+		status = "disabled";
+	};
+
+	ads1015_49: ads1015@49 {
+		compatible = "ti,ads1015";
+		reg = <0x49>;
+		label = "ADS1015_49";
+		#io-channel-cells = <1>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		status = "disabled";
 	};
 };
 
@@ -158,6 +157,7 @@
 	clock-frequency = <I2C_BITRATE_STANDARD>;
 	pinctrl-0 = <&i2c1_default>;
 	pinctrl-names = "default";
+	status = "disabled";
 };
 
 &i2s0 {
@@ -173,44 +173,40 @@
 };
 
 &spi2 {
-	#address-cells = <1>;
-	#size-cells = <0>;
-	status = "okay";
-	pinctrl-0 = <&spim2_default>;
-	pinctrl-names = "default";
+	status = "disabled";
 };
 
 &twai {
 	pinctrl-0 = <&twai_default>;
 	pinctrl-names = "default";
+	bus-speed = <500000>;
 	status = "okay";
-//	bus-speed = <500000>;
 };
 
 &timer0 {
 	status = "okay";
-	counter0:counter {
+	counter0: counter {
 		status = "okay";
 	};
 };
 
 &timer1 {
 	status = "okay";
-	counter1:counter {
+	counter1: counter {
 		status = "okay";
 	};
 };
 
 &timer2 {
 	status = "okay";
-	counter2:counter {
+	counter2: counter {
 		status = "okay";
 	};
 };
 
 &timer3 {
 	status = "okay";
-	counter3:counter {
+	counter3: counter {
 		status = "okay";
 	};
 };
@@ -231,7 +227,7 @@
 	status = "okay";
 };
 
-&adc0{
+&adc0 {
 	status = "okay";
 	unit = <1>;
 	#io-channel-cells = <1>;
@@ -267,48 +263,28 @@
 		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
 		zephyr,resolution = <12>;
 	};
+	channel@10 {
+		reg = <10>;
+		zephyr,gain = "ADC_GAIN_1_4";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,resolution = <12>;
+	};
 };
 
-//&adc1 {
-//	status = "okay";
-//	unit = <2>;
-//	channel-count = <1>;
-//	#io-channel-cells = <1>;
-//	#address-cells = <1>;
-//	#size-cells = <0>;
-//	channel-count = <1>;
-//
-//	channel@9 {
-//		reg = <9>;
-//		zephyr,gain = "ADC_GAIN_1";
-//		zephyr,reference = "ADC_REF_INTERNAL";
-//		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
-//		zephyr,resolution = <12>;
-//	};
-//};
-//&mcpwm0 {
-//	pinctrl-0 = <&mcpwm0_default>;
-//	pinctrl-names = "default";
-//	prescale = <255>;
-//	prescale-timer0 = <24>;
-////	prescale-timer1 = <0>;
-////	prescale-timer2 = <255>;
-//	status = "okay";
-//};
-
-&ledc0{
+&ledc0 {
 	status = "okay";
 	pinctrl-0 = <&ledc0_default>;
 	pinctrl-names = "default";
 	#address-cells = <1>;
 	#size-cells = <0>;
-	channel@0{
+
+	channel@0 {
 		reg = <0x0>;
 		timer = <0>;
 	};
-	channel@1{
+	channel@1 {
 		reg = <0x1>;
 		timer = <1>;
 	};
 };
-

@@ -1,9 +1,10 @@
 #include "pwm.h"
-#include <stdio.h>
+
+LOG_MODULE_REGISTER(pwm);
 
 void pwm_init(struct pwm_dt_spec *pwm) {
     if (!pwm_is_ready_dt(pwm)) {
-        printf("Error: PWM device %s is not ready\n", pwm->dev->name);
+        LOG_ERR("Error: PWM device %s is not ready\n", pwm->dev->name);
     }
 }
 
@@ -14,7 +15,7 @@ int pwm_set_pulse_width_percent(struct pwm_dt_spec *pwm, uint8_t pulse_width_per
 
     int ret = pwm_set_pulse_dt(pwm, pulse_width);
     if (ret < 0) {
-        printf("Error %d: failed to set pulse width\n", ret);
+        LOG_ERR("Error %d: failed to set pulse width\n", ret);
     }
     return ret;
 }

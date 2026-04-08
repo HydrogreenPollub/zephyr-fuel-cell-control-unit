@@ -23,13 +23,20 @@ project(app LANGUAGES C)
 
 target_sources(app PRIVATE
         src/main.c
-        src/fccu_v2.c
+        src/fccu.c
+        src/fccu_analog.c
+        src/fccu_fan.c
+        src/fccu_digital.c
+        src/fccu_log.c
+        src/fccu_shell.c
         peripherals/can.c
         peripherals/gpio.c
         peripherals/adc.c
         peripherals/pwm.c
-        peripherals/ads1015.c
         peripherals/counter.c
+        peripherals/status_led.c
+        src/ads1015.c
+        can-definitions/candef.c
 )
 
 target_include_directories(app PRIVATE
@@ -37,4 +44,3 @@ target_include_directories(app PRIVATE
         can-definitions
         src
 )
-

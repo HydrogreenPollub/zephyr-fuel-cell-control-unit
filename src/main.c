@@ -8,7 +8,7 @@
 #include "../../zephyr/include/zephyr/devicetree.h"
 #include <zephyr/logging/log.h>
 
-#include "fccu_v2.h"
+#include "fccu.h"
 
 LOG_MODULE_REGISTER(app);
 
