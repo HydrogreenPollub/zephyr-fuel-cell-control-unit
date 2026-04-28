@@ -161,8 +161,6 @@ void fccu_ads1015_init()
 {
     uint8_t probe = 0;
 
-    i2c_recover_bus(ads48_i2c.bus);
-
     ads1015_48_dev.i2c = &ads48_i2c;
     if (i2c_write_dt(&ads48_i2c, &probe, 1) == 0) {
         s_ads48_ok = true;
@@ -245,7 +243,8 @@ void fccu_bmp280_sensor_read()
         return;
     }
     if (sensor_sample_fetch(sensor.sensor)) {
-        LOG_ERR("BME280@76 fetch error");
+        LOG_WRN("BME280@76 fetch error — recovering I2C bus");
+        i2c_recover_bus(DEVICE_DT_GET(DT_NODELABEL(i2c0)));
         return;
     }
     sensor_channel_get(sensor.sensor, SENSOR_CHAN_AMBIENT_TEMP, &sensor.temperature_buffer);
@@ -266,7 +265,8 @@ void fccu_bmp280_sensor2_read()
         return;
     }
     if (sensor_sample_fetch(sensor2.sensor)) {
-        LOG_ERR("BME280@77 fetch error");
+        LOG_WRN("BME280@77 fetch error — recovering I2C bus");
+        i2c_recover_bus(DEVICE_DT_GET(DT_NODELABEL(i2c0)));
         return;
     }
     sensor_channel_get(sensor2.sensor, SENSOR_CHAN_AMBIENT_TEMP, &sensor2.temperature_buffer);

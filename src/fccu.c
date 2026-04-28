@@ -16,6 +16,8 @@ LOG_MODULE_REGISTER(fccu, LOG_LEVEL_INF);
 volatile fccu_flags_t flags;
 volatile fccu_state_t state = STOPPED;
 
+static uint32_t purge_periodic_ticks;
+
 fccu_can_t can = {
     .can_device     = DEVICE_DT_GET(DT_ALIAS(can)),
     .can_status_led = GPIO_DT_SPEC_GET(DT_ALIAS(can_status_led), gpios),
@@ -132,21 +134,47 @@ void fccu_on_tick()
         fccu_ads1015_read();
         fccu_flow_on_tick();
         fccu_can_send_state();
+        fccu_flow_can_send();
+
+        if (g_fan_manual) {
+            fan_pwm_percent = g_fan_manual_duty_pct;
+        } else if (state == RUNNING) {
+            fan_pwm_percent = fccu_fan_compute_duty(sensor.temperature);
+        } else {
+            fan_pwm_percent = 0;
+        }
+
+        if (fan_pwm_percent > 0 && !flags.fan_on) {
+            fccu_fan_on();
+        } else if (fan_pwm_percent == 0 && flags.fan_on) {
+            fccu_fan_off();
+        }
+        fccu_fan_pwm_set(fan_pwm_percent);
 
         if (state == RUNNING) {
-            fan_pwm_percent = g_fan_manual
-                ? g_fan_manual_duty_pct
-                : fccu_fan_compute_duty(sensor.temperature);
-            fccu_fan_pwm_set(fan_pwm_percent);
+            purge_periodic_ticks++;
 
             if (!flags.purge_valve_on) {
-                float fc_past;
-                if (fccu_log_get_fc_ago(PURGE_COMPARE_SAMPLES, &fc_past)) {
-                    if (fc_past - adc.fuel_cell_voltage.voltage >= g_purge_trigger_v) {
-                        LOG_INF("Auto purge: FC drop %.2f V",
+                switch (g_purge_mode) {
+                case PURGE_MODE_THRESHOLD: {
+                    float fc_past;
+                    if (fccu_log_get_fc_ago(PURGE_COMPARE_SAMPLES, &fc_past) &&
+                        fc_past - adc.fuel_cell_voltage.voltage >= g_purge_trigger_v) {
+                        LOG_INF("Threshold purge: FC drop %.2f V",
                                 (double)(fc_past - adc.fuel_cell_voltage.voltage));
                         fccu_purge_valve_on();
                     }
+                    break;
+                }
+                case PURGE_MODE_PERIODIC:
+                    if (purge_periodic_ticks >= g_purge_periodic_interval_s) {
+                        LOG_INF("Periodic purge (%u s)", g_purge_periodic_interval_s);
+                        fccu_purge_valve_on();
+                        purge_periodic_ticks = 0;
+                    }
+                    break;
+                case PURGE_MODE_MANUAL:
+                    break;
                 }
             }
         }

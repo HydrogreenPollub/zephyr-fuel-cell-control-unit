@@ -1,5 +1,4 @@
 #include "fccu_digital.h"
-#include "fccu_fan.h"
 
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/logging/log.h>
@@ -11,8 +10,9 @@ fccu_valve_pin_t valve_pin = {
     .purge_valve_on_pin = GPIO_DT_SPEC_GET(DT_ALIAS(purge_valve_pin), gpios),
 };
 
-float   g_purge_trigger_v         = PURGE_TRIGGER_FC_DROP_V;
-uint8_t g_main_valve_setpoint_pct = MAIN_VALVE_DEFAULT_PCT;
+float             g_purge_trigger_v            = PURGE_TRIGGER_FC_DROP_V;
+fccu_purge_mode_t g_purge_mode                 = PURGE_MODE_PERIODIC;
+uint32_t          g_purge_periodic_interval_s  = PURGE_PERIODIC_INTERVAL_S;
 
 static struct k_work_delayable purge_valve_off_work;
 
@@ -75,11 +75,17 @@ static void led_test_off_fn(struct k_work *work)
     status_led_set_override(false);
 }
 
-static void on_onboard_press()
+static void onboard_debounce_fn(struct k_work *work);
+static K_WORK_DELAYABLE_DEFINE(onboard_debounce_work, onboard_debounce_fn);
+
+static void onboard_debounce_fn(struct k_work *work)
 {
-    LOG_INF("On-board button: LED test");
-    status_led_set_override(true);
-    k_work_reschedule(&led_test_off_work, K_SECONDS(2));
+    ARG_UNUSED(work);
+    if (gpio_pin_get_dt(&btn_onboard) > 0) {
+        LOG_INF("On-board button: pressed");
+        status_led_set_override(true);
+        k_work_reschedule(&led_test_off_work, K_SECONDS(2));
+    }
 }
 
 static bool ext_long_fired;
@@ -96,21 +102,19 @@ static void external_long_fn(struct k_work *work)
         LOG_INF("External button: long press — stopping");
         state = STOPPED;
         fccu_main_valve_off();
-        fccu_fan_off();
+        g_purge_mode = PURGE_MODE_MANUAL;
     } else {
         LOG_INF("External button: long press — starting");
         state = RUNNING;
         fccu_main_valve_on();
-        fccu_fan_on();
-        fan_pwm_percent = FAN_MIN_DUTY_PCT;
-        fccu_fan_pwm_set(fan_pwm_percent);
+        g_purge_mode = PURGE_MODE_PERIODIC;
     }
 }
 
 static void onboard_gpio_cb(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
 {
     ARG_UNUSED(dev); ARG_UNUSED(cb); ARG_UNUSED(pins);
-    on_onboard_press();
+    k_work_reschedule(&onboard_debounce_work, K_MSEC(20));
 }
 
 static void external_gpio_cb(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
@@ -118,12 +122,14 @@ static void external_gpio_cb(const struct device *dev, struct gpio_callback *cb,
     ARG_UNUSED(dev); ARG_UNUSED(cb); ARG_UNUSED(pins);
 
     if (gpio_pin_get_dt(&btn_external) > 0) {
+        LOG_INF("External button: pressed");
         ext_long_fired = false;
         k_work_reschedule(&external_long_work, K_MSEC(500));
     } else {
+        LOG_INF("External button: released");
         k_work_cancel_delayable(&external_long_work);
         if (!ext_long_fired) {
-            LOG_INF("External button: short press — manual purge 100 ms");
+            LOG_INF("External button: short press — manual purge");
             if (!flags.purge_valve_on) {
                 fccu_purge_valve_on_ms(100);
             }

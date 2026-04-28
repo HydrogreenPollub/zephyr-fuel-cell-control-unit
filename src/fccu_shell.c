@@ -3,9 +3,11 @@
 #include "fccu_analog.h"
 #include "fccu_fan.h"
 #include "fccu_digital.h"
+#include "fccu_flow.h"
 #include "can.h"
 
 #include <stdlib.h>
+#include <string.h>
 #include <zephyr/shell/shell.h>
 
 
@@ -32,9 +34,11 @@ int cmd_status(const struct shell *sh, size_t argc, char **argv)
     shell_print(sh, "fan:     %u%%  (target %.1f C, manual=%d)",
                 fan_pwm_percent,
                 (double)g_fan_target_c, (int)g_fan_manual);
-    shell_print(sh, "valve:   main=%d purge=%d setpoint=%u%%",
-                (int)flags.main_valve_on, (int)flags.purge_valve_on,
-                g_main_valve_setpoint_pct);
+    const char *mode_str = g_purge_mode == PURGE_MODE_THRESHOLD ? "threshold"
+                         : g_purge_mode == PURGE_MODE_PERIODIC  ? "periodic"
+                                                                 : "manual";
+    shell_print(sh, "valve:   main=%d purge=%d mode=%s",
+                (int)flags.main_valve_on, (int)flags.purge_valve_on, mode_str);
     shell_print(sh, "ho_zero: %.4f %.4f %.4f %.4f",
                 (double)ho_zero_v[0], (double)ho_zero_v[1],
                 (double)ho_zero_v[2], (double)ho_zero_v[3]);
@@ -129,16 +133,19 @@ SHELL_CMD_REGISTER(fan, &sub_fan, "Fan control (target, duty, auto)", NULL);
 int cmd_valve_main(const struct shell *sh, size_t argc, char **argv)
 {
     if (argc < 2) {
-        shell_print(sh, "usage: valve main <0-100>");
+        shell_print(sh, "usage: valve main <on|off>");
         return -EINVAL;
     }
-    int pct = atoi(argv[1]);
-    if (pct < 0 || pct > 100) {
-        shell_print(sh, "setpoint must be 0-100");
+    if (strcmp(argv[1], "on") == 0) {
+        fccu_main_valve_on();
+        shell_print(sh, "main valve open");
+    } else if (strcmp(argv[1], "off") == 0) {
+        fccu_main_valve_off();
+        shell_print(sh, "main valve closed");
+    } else {
+        shell_print(sh, "usage: valve main <on|off>");
         return -EINVAL;
     }
-    g_main_valve_setpoint_pct = (uint8_t)pct;
-    shell_print(sh, "main valve setpoint: %d%%", pct);
     return 0;
 }
 
@@ -153,11 +160,7 @@ int cmd_valve_purge(const struct shell *sh, size_t argc, char **argv)
         shell_print(sh, "duration must be > 0");
         return -EINVAL;
     }
-    gpio_set(&valve_pin.purge_valve_on_pin);
-    flags.purge_valve_on = true;
-    k_msleep(ms);
-    gpio_reset(&valve_pin.purge_valve_on_pin);
-    flags.purge_valve_on = false;
+    fccu_purge_valve_on_ms((uint32_t)ms);
     shell_print(sh, "purge pulse: %d ms", ms);
     return 0;
 }
@@ -173,14 +176,52 @@ int cmd_valve_trigger(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
+int cmd_valve_mode(const struct shell *sh, size_t argc, char **argv)
+{
+    if (argc < 2) {
+        shell_print(sh, "usage: valve mode <threshold|periodic|manual>");
+        return -EINVAL;
+    }
+    if (strcmp(argv[1], "threshold") == 0) {
+        g_purge_mode = PURGE_MODE_THRESHOLD;
+    } else if (strcmp(argv[1], "periodic") == 0) {
+        g_purge_mode = PURGE_MODE_PERIODIC;
+    } else if (strcmp(argv[1], "manual") == 0) {
+        g_purge_mode = PURGE_MODE_MANUAL;
+    } else {
+        shell_print(sh, "usage: valve mode <threshold|periodic|manual>");
+        return -EINVAL;
+    }
+    shell_print(sh, "purge mode: %s", argv[1]);
+    return 0;
+}
+
+int cmd_valve_interval(const struct shell *sh, size_t argc, char **argv)
+{
+    if (argc < 2) {
+        shell_print(sh, "usage: valve interval <s>");
+        return -EINVAL;
+    }
+    int s = atoi(argv[1]);
+    if (s <= 0) {
+        shell_print(sh, "interval must be > 0");
+        return -EINVAL;
+    }
+    g_purge_periodic_interval_s = (uint32_t)s;
+    shell_print(sh, "purge interval: %d s", s);
+    return 0;
+}
+
 SHELL_STATIC_SUBCMD_SET_CREATE(sub_valve,
-    SHELL_CMD_ARG(main,    NULL, "Set main valve setpoint [0-100%%]",   cmd_valve_main,    2, 0),
-    SHELL_CMD_ARG(purge,   NULL, "Pulse purge valve [ms]",              cmd_valve_purge,   2, 0),
-    SHELL_CMD_ARG(trigger, NULL, "Set auto-purge FC drop threshold [V]",cmd_valve_trigger, 2, 0),
+    SHELL_CMD_ARG(main,     NULL, "Open or close main valve [on|off]",      cmd_valve_main,     2, 0),
+    SHELL_CMD_ARG(purge,    NULL, "Pulse purge valve [ms]",                  cmd_valve_purge,    2, 0),
+    SHELL_CMD_ARG(mode,     NULL, "Set purge mode [threshold|periodic|manual]", cmd_valve_mode,  2, 0),
+    SHELL_CMD_ARG(trigger,  NULL, "Set threshold purge FC drop [V]",         cmd_valve_trigger,  2, 0),
+    SHELL_CMD_ARG(interval, NULL, "Set periodic purge interval [s]",         cmd_valve_interval, 2, 0),
     SHELL_SUBCMD_SET_END
 );
 
-SHELL_CMD_REGISTER(valve, &sub_valve, "Valve control (main, purge, trigger)", NULL);
+SHELL_CMD_REGISTER(valve, &sub_valve, "Valve control (main, purge, mode, trigger, interval)", NULL);
 
 int cmd_send(const struct shell *sh, size_t argc, char **argv)
 {
@@ -200,3 +241,15 @@ int cmd_send(const struct shell *sh, size_t argc, char **argv)
 }
 
 SHELL_CMD_REGISTER(send, NULL, "Send CAN float: send <id_hex> <float>", cmd_send);
+
+
+int cmd_flow(const struct shell *sh, size_t argc, char **argv)
+{
+    ARG_UNUSED(argc);
+    ARG_UNUSED(argv);
+    shell_print(sh, "flow_rate:  %.3f Ln/min", (double)flow_rate_lnmin);
+    shell_print(sh, "flow_total: %.3f Ln",     (double)flow_total_ln);
+    return 0;
+}
+
+SHELL_CMD_REGISTER(flow, NULL, "Show flow rate and accumulated total", cmd_flow);
