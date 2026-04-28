@@ -10,10 +10,20 @@ extern float   g_fan_target_c;
 extern bool    g_fan_manual;
 extern uint8_t g_fan_manual_duty_pct;
 
-void    fccu_fan_init();
-void    fccu_fan_on();
-void    fccu_fan_off();
-void    fccu_fan_pwm_set(uint8_t pwm_percent);
+/* Initialise fan GPIO and PWM to inactive. */
+void fccu_fan_init();
+
+/* Assert the fan enable GPIO. */
+void fccu_fan_on();
+
+/* De-assert the fan enable GPIO. */
+void fccu_fan_off();
+
+/* Set PWM duty cycle (0–100 %). */
+void fccu_fan_pwm_set(uint8_t pwm_percent);
+
+/* Compute proportional duty cycle from BME76 temperature.
+ * Returns FAN_MIN_DUTY_PCT when within deadband, 100 % at target + FAN_FULLSCALE_C. */
 uint8_t fccu_fan_compute_duty(float temp_c);
 
 #endif /* FCCU_FAN_H */

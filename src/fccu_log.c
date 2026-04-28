@@ -47,7 +47,7 @@ size_t fccu_log_count()
     return s_count;
 }
 
-static int cmd_flog_dump(const struct shell *sh, size_t argc, char **argv)
+int cmd_flog_dump(const struct shell *sh, size_t argc, char **argv)
 {
     ARG_UNUSED(argc);
     ARG_UNUSED(argv);
@@ -85,7 +85,7 @@ static int cmd_flog_dump(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
-static int cmd_flog_clear(const struct shell *sh, size_t argc, char **argv)
+int cmd_flog_clear(const struct shell *sh, size_t argc, char **argv)
 {
     ARG_UNUSED(argc);
     ARG_UNUSED(argv);
@@ -94,7 +94,7 @@ static int cmd_flog_clear(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
-static int cmd_flog_status(const struct shell *sh, size_t argc, char **argv)
+int cmd_flog_status(const struct shell *sh, size_t argc, char **argv)
 {
     ARG_UNUSED(argc);
     ARG_UNUSED(argv);

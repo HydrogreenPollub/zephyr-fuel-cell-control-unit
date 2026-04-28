@@ -1,3 +1,4 @@
+#include "fccu_shell.h"
 #include "fccu.h"
 #include "fccu_analog.h"
 #include "fccu_fan.h"
@@ -8,7 +9,7 @@
 #include <zephyr/shell/shell.h>
 
 
-static int cmd_status(const struct shell *sh, size_t argc, char **argv)
+int cmd_status(const struct shell *sh, size_t argc, char **argv)
 {
     ARG_UNUSED(argc);
     ARG_UNUSED(argv);
@@ -43,11 +44,10 @@ static int cmd_status(const struct shell *sh, size_t argc, char **argv)
 SHELL_CMD_REGISTER(status, NULL, "Show all sensor values and state", cmd_status);
 
 
-static int cmd_adc(const struct shell *sh, size_t argc, char **argv)
+int cmd_adc(const struct shell *sh, size_t argc, char **argv)
 {
     ARG_UNUSED(argc);
     ARG_UNUSED(argv);
-    shell_print(sh, "lp_raw:  %d", (int)adc.low_pressure_sensor.raw_value);
     shell_print(sh, "fc_v_raw:%d  -> %.3f V",
                 (int)adc.fuel_cell_voltage.raw_value,
                 (double)adc.fuel_cell_voltage.voltage);
@@ -66,7 +66,7 @@ static int cmd_adc(const struct shell *sh, size_t argc, char **argv)
 SHELL_CMD_REGISTER(adc, NULL, "Show raw ADC values", cmd_adc);
 
 
-static int cmd_purge(const struct shell *sh, size_t argc, char **argv)
+int cmd_purge(const struct shell *sh, size_t argc, char **argv)
 {
     ARG_UNUSED(argc);
     ARG_UNUSED(argv);
@@ -78,7 +78,7 @@ static int cmd_purge(const struct shell *sh, size_t argc, char **argv)
 SHELL_CMD_REGISTER(purge, NULL, "Trigger purge valve", cmd_purge);
 
 
-static int cmd_fan_target(const struct shell *sh, size_t argc, char **argv)
+int cmd_fan_target(const struct shell *sh, size_t argc, char **argv)
 {
     if (argc < 2) {
         shell_print(sh, "usage: fan target <°C>");
@@ -90,7 +90,7 @@ static int cmd_fan_target(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
-static int cmd_fan_duty(const struct shell *sh, size_t argc, char **argv)
+int cmd_fan_duty(const struct shell *sh, size_t argc, char **argv)
 {
     if (argc < 2) {
         shell_print(sh, "usage: fan duty <0-100>");
@@ -107,7 +107,7 @@ static int cmd_fan_duty(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
-static int cmd_fan_auto(const struct shell *sh, size_t argc, char **argv)
+int cmd_fan_auto(const struct shell *sh, size_t argc, char **argv)
 {
     ARG_UNUSED(argc);
     ARG_UNUSED(argv);
@@ -126,7 +126,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_fan,
 SHELL_CMD_REGISTER(fan, &sub_fan, "Fan control (target, duty, auto)", NULL);
 
 
-static int cmd_valve_main(const struct shell *sh, size_t argc, char **argv)
+int cmd_valve_main(const struct shell *sh, size_t argc, char **argv)
 {
     if (argc < 2) {
         shell_print(sh, "usage: valve main <0-100>");
@@ -142,7 +142,7 @@ static int cmd_valve_main(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
-static int cmd_valve_purge(const struct shell *sh, size_t argc, char **argv)
+int cmd_valve_purge(const struct shell *sh, size_t argc, char **argv)
 {
     if (argc < 2) {
         shell_print(sh, "usage: valve purge <ms>");
@@ -162,7 +162,7 @@ static int cmd_valve_purge(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
-static int cmd_valve_trigger(const struct shell *sh, size_t argc, char **argv)
+int cmd_valve_trigger(const struct shell *sh, size_t argc, char **argv)
 {
     if (argc < 2) {
         shell_print(sh, "usage: valve trigger <V>");
@@ -182,7 +182,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_valve,
 
 SHELL_CMD_REGISTER(valve, &sub_valve, "Valve control (main, purge, trigger)", NULL);
 
-static int cmd_send(const struct shell *sh, size_t argc, char **argv)
+int cmd_send(const struct shell *sh, size_t argc, char **argv)
 {
     if (argc < 3) {
         shell_print(sh, "usage: send <id_hex> <float>");

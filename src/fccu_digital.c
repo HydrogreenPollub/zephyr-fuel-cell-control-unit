@@ -58,8 +58,6 @@ void fccu_purge_valve_on()
     fccu_purge_valve_on_ms(PURGE_DURATION_MS);
 }
 
-/* ── Button GPIO specs ───────────────────────────────────────────────── */
-
 static const struct gpio_dt_spec btn_onboard  =
     GPIO_DT_SPEC_GET(DT_PATH(zephyr_user), button_onboard_gpios);
 static const struct gpio_dt_spec btn_external =
@@ -67,8 +65,6 @@ static const struct gpio_dt_spec btn_external =
 
 static struct gpio_callback onboard_cb_data;
 static struct gpio_callback external_cb_data;
-
-/* ── On-board button: LED test ───────────────────────────────────────── */
 
 static void led_test_off_fn(struct k_work *work);
 static K_WORK_DELAYABLE_DEFINE(led_test_off_work, led_test_off_fn);
@@ -85,8 +81,6 @@ static void on_onboard_press()
     status_led_set_override(true);
     k_work_reschedule(&led_test_off_work, K_SECONDS(2));
 }
-
-/* ── External button: short = purge 100 ms, long = start / stop ─────── */
 
 static bool ext_long_fired;
 
@@ -113,8 +107,6 @@ static void external_long_fn(struct k_work *work)
     }
 }
 
-/* ── GPIO interrupt callbacks ────────────────────────────────────────── */
-
 static void onboard_gpio_cb(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
 {
     ARG_UNUSED(dev); ARG_UNUSED(cb); ARG_UNUSED(pins);
@@ -126,11 +118,9 @@ static void external_gpio_cb(const struct device *dev, struct gpio_callback *cb,
     ARG_UNUSED(dev); ARG_UNUSED(cb); ARG_UNUSED(pins);
 
     if (gpio_pin_get_dt(&btn_external) > 0) {
-        /* Pressed — arm long-press timer */
         ext_long_fired = false;
         k_work_reschedule(&external_long_work, K_MSEC(500));
     } else {
-        /* Released — cancel timer; if it hadn't fired yet it was a short press */
         k_work_cancel_delayable(&external_long_work);
         if (!ext_long_fired) {
             LOG_INF("External button: short press — manual purge 100 ms");
@@ -140,8 +130,6 @@ static void external_gpio_cb(const struct device *dev, struct gpio_callback *cb,
         }
     }
 }
-
-/* ── Button init ─────────────────────────────────────────────────────── */
 
 void fccu_buttons_init()
 {

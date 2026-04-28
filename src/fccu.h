@@ -30,8 +30,6 @@
 /* Moving average */
 #define MOV_AVG_SIZE                20
 
-/* ── DT-spec struct types ─────────────────────────────────────────── */
-
 typedef struct {
     struct adc_dt_spec adc_channel;
     int16_t raw_value;
@@ -39,7 +37,6 @@ typedef struct {
 } fccu_adc_device_t;
 
 typedef struct {
-    fccu_adc_device_t low_pressure_sensor;
     fccu_adc_device_t fuel_cell_voltage;
     fccu_adc_device_t supercap_voltage;
     fccu_adc_device_t temp_sensor;
@@ -105,8 +102,6 @@ typedef enum {
     IDLE_STATE,
 } fccu_state_t;
 
-/* ── Shared state ────────────────────────────────────────────────── */
-
 extern volatile fccu_flags_t flags;
 extern volatile fccu_state_t state;
 extern fccu_can_t            can;
@@ -115,9 +110,10 @@ extern fccu_can_t            can;
 extern float   g_purge_trigger_v;
 extern uint8_t g_main_valve_setpoint_pct;
 
-/* ── API ─────────────────────────────────────────────────────────── */
-
+/* Initialise all subsystems. Call once before fccu_on_tick(). */
 void fccu_init();
+
+/* Process one iteration of the main control loop. Call in a tight while(1). */
 void fccu_on_tick();
 
 #endif /* FCCU_H */

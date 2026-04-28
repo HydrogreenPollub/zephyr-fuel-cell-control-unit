@@ -19,9 +19,17 @@ typedef struct {
     float   bme77_t, bme77_h, bme77_p;
 } fccu_log_sample_t;
 
-void   fccu_log_add(const fccu_log_sample_t *s);
-bool   fccu_log_get_fc_ago(uint16_t samples_ago, float *out_fc);
-void   fccu_log_clear();
+/* Append one sample to the circular buffer, evicting the oldest if full. */
+void fccu_log_add(const fccu_log_sample_t *s);
+
+/* Read the fc_v value from samples_ago steps before the newest entry.
+ * Returns false if the buffer does not contain enough samples. */
+bool fccu_log_get_fc_ago(uint16_t samples_ago, float *out_fc);
+
+/* Reset the circular buffer. */
+void fccu_log_clear();
+
+/* Return the number of samples currently stored. */
 size_t fccu_log_count();
 
 #endif

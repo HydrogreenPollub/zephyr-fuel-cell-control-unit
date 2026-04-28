@@ -7,17 +7,15 @@
 
 #include "ads1015.h"
 #include "can.h"
+#include "candef.h"
 
 LOG_MODULE_REGISTER(fccu_analog, LOG_LEVEL_INF);
 
 
-/* ── Variables ───────────────────────────────────────────────────── */
-
 fccu_adc_t adc = {
-    .low_pressure_sensor.adc_channel = ADC_DT_SPEC_GET_BY_IDX(DT_PATH(zephyr_user), 0),
-    .fuel_cell_voltage.adc_channel   = ADC_DT_SPEC_GET_BY_IDX(DT_PATH(zephyr_user), 1),
-    .supercap_voltage.adc_channel    = ADC_DT_SPEC_GET_BY_IDX(DT_PATH(zephyr_user), 2),
-    .temp_sensor.adc_channel         = ADC_DT_SPEC_GET_BY_IDX(DT_PATH(zephyr_user), 3),
+    .fuel_cell_voltage.adc_channel = ADC_DT_SPEC_GET_BY_IDX(DT_PATH(zephyr_user), 0),
+    .supercap_voltage.adc_channel  = ADC_DT_SPEC_GET_BY_IDX(DT_PATH(zephyr_user), 1),
+    .temp_sensor.adc_channel       = ADC_DT_SPEC_GET_BY_IDX(DT_PATH(zephyr_user), 2),
 };
 
 bmp280_sensor_t sensor = {
@@ -52,8 +50,6 @@ static mov_avg_t avg_bme76_t, avg_bme76_h, avg_bme76_p;
 static mov_avg_t avg_bme77_t, avg_bme77_h, avg_bme77_p;
 static mov_avg_t avg_fc_v, avg_sc_v;
 
-/* ── Moving average ──────────────────────────────────────────────── */
-
 static float mov_avg_push(mov_avg_t *m, float v)
 {
     if (m->count < MOV_AVG_SIZE) {
@@ -69,8 +65,6 @@ static float mov_avg_push(mov_avg_t *m, float v)
     return (m->count > 0) ? (m->sum / (float)m->count) : 0.0f;
 }
 
-/* ── I2C early recovery (before BME280 SYS_INIT at priority 90) ─── */
-
 static int fccu_i2c_early_recover()
 {
     const struct device *bus = DEVICE_DT_GET(DT_NODELABEL(i2c0));
@@ -81,11 +75,8 @@ static int fccu_i2c_early_recover()
 }
 SYS_INIT(fccu_i2c_early_recover, APPLICATION, 5);
 
-/* ── ADC ─────────────────────────────────────────────────────────── */
-
 void fccu_adc_init()
 {
-    adc_init(&adc.low_pressure_sensor.adc_channel);
     adc_init(&adc.fuel_cell_voltage.adc_channel);
     adc_init(&adc.supercap_voltage.adc_channel);
     adc_init(&adc.temp_sensor.adc_channel);
@@ -93,8 +84,6 @@ void fccu_adc_init()
 
 void fccu_adc_read()
 {
-    adc_read_(&adc.low_pressure_sensor.adc_channel, &adc.low_pressure_sensor.raw_value);
-
     adc_read_(&adc.fuel_cell_voltage.adc_channel, &adc.fuel_cell_voltage.raw_value);
     adc.fuel_cell_voltage.voltage = mov_avg_push(&avg_fc_v,
         adc_map((float)adc.fuel_cell_voltage.raw_value, 1.0f, 2853.8f, 0.4f, 52.0f));
@@ -111,38 +100,29 @@ void fccu_adc_read()
     float lp_v   = (float)val / 1000.0f;
     float lp_bar = (lp_v - 0.120f) / (2.805f - 0.120f);
 
-    LOG_INF("FC_V: %.3f  SC_V: %.3f  LP_raw: %d",
+    LOG_INF("FC_V: %.3f  SC_V: %.3f",
             (double)adc.fuel_cell_voltage.voltage,
-            (double)adc.supercap_voltage.voltage,
-            (int)adc.low_pressure_sensor.raw_value);
+            (double)adc.supercap_voltage.voltage);
 
-    /* FCCU_POWER */
-    {
-        struct candef_fccu_power_t msg = {
-            .fc_voltage = (uint16_t)(adc.fuel_cell_voltage.voltage * 1000.0f),
-            .sc_voltage = (uint16_t)(adc.supercap_voltage.voltage  * 1000.0f),
-            .fc_current = (uint16_t)(ads1015_data.fc_current        * 1000.0f),
-            .fc_temp_c  = (int16_t) (ads1015_data.fc_temp_c         * 10.0f),
-        };
-        uint8_t buf[CANDEF_FCCU_POWER_LENGTH];
-        candef_fccu_power_pack(buf, &msg, sizeof(buf));
-        can_send_(can.can_device, CANDEF_FCCU_POWER_FRAME_ID, buf, sizeof(buf));
-    }
+    struct candef_fccu_power_t power_msg = {
+        .fc_voltage = (uint16_t)(adc.fuel_cell_voltage.voltage * 1000.0f),
+        .sc_voltage = (uint16_t)(adc.supercap_voltage.voltage  * 1000.0f),
+        .fc_current = (uint16_t)(ads1015_data.fc_current        * 1000.0f),
+        .fc_temp_c  = (int16_t) (ads1015_data.fc_temp_c         * 10.0f),
+    };
+    uint8_t power_buf[CANDEF_FCCU_POWER_LENGTH];
+    candef_fccu_power_pack(power_buf, &power_msg, sizeof(power_buf));
+    can_send_(can.can_device, CANDEF_FCCU_POWER_FRAME_ID, power_buf, sizeof(power_buf));
 
-    /* FCCU_HYDROGEN */
-    {
-        struct candef_fccu_hydrogen_t msg = {
-            .lp_pressure      = (uint16_t)(lp_bar                * 1000.0f),
-            .hp_pressure      = (uint16_t)(ads1015_data.hp_sensor * 1000.0f),
-            .leakage_voltage  = (uint16_t)(ads1015_data.ads48[3]  * 10000.0f),
-        };
-        uint8_t buf[CANDEF_FCCU_HYDROGEN_LENGTH];
-        candef_fccu_hydrogen_pack(buf, &msg, sizeof(buf));
-        can_send_(can.can_device, CANDEF_FCCU_HYDROGEN_FRAME_ID, buf, sizeof(buf));
-    }
+    struct candef_fccu_hydrogen_t hydrogen_msg = {
+        .lp_pressure      = (uint16_t)(lp_bar                * 1000.0f),
+        .hp_pressure      = (uint16_t)(ads1015_data.hp_sensor * 1000.0f),
+        .leakage_voltage  = (uint16_t)(ads1015_data.ads48[3]  * 10000.0f),
+    };
+    uint8_t hydrogen_buf[CANDEF_FCCU_HYDROGEN_LENGTH];
+    candef_fccu_hydrogen_pack(hydrogen_buf, &hydrogen_msg, sizeof(hydrogen_buf));
+    can_send_(can.can_device, CANDEF_FCCU_HYDROGEN_FRAME_ID, hydrogen_buf, sizeof(hydrogen_buf));
 }
-
-/* ── ADS1015 ─────────────────────────────────────────────────────── */
 
 static float read_ntc_temperature(float adc_voltage)
 {
@@ -230,21 +210,16 @@ void fccu_ads1015_read()
             (double)ads1015_data.fc_current, (double)ads1015_data.fc_temp_c,
             (double)ads1015_data.hp_sensor,  (double)ads1015_data.lp_sensor);
 
-    /* FCCU_CURRENTS */
-    {
-        struct candef_fccu_currents_t msg = {
-            .ho_current_0 = (int16_t)(ads1015_data.ho_current[0] * 1000.0f),
-            .ho_current_1 = (int16_t)(ads1015_data.ho_current[1] * 1000.0f),
-            .ho_current_2 = (int16_t)(ads1015_data.ho_current[2] * 1000.0f),
-            .ho_current_3 = (int16_t)(ads1015_data.ho_current[3] * 1000.0f),
-        };
-        uint8_t buf[CANDEF_FCCU_CURRENTS_LENGTH];
-        candef_fccu_currents_pack(buf, &msg, sizeof(buf));
-        can_send_(can.can_device, CANDEF_FCCU_CURRENTS_FRAME_ID, buf, sizeof(buf));
-    }
+    struct candef_fccu_currents_t currents_msg = {
+        .ho_current_0 = (int16_t)(ads1015_data.ho_current[0] * 1000.0f),
+        .ho_current_1 = (int16_t)(ads1015_data.ho_current[1] * 1000.0f),
+        .ho_current_2 = (int16_t)(ads1015_data.ho_current[2] * 1000.0f),
+        .ho_current_3 = (int16_t)(ads1015_data.ho_current[3] * 1000.0f),
+    };
+    uint8_t currents_buf[CANDEF_FCCU_CURRENTS_LENGTH];
+    candef_fccu_currents_pack(currents_buf, &currents_msg, sizeof(currents_buf));
+    can_send_(can.can_device, CANDEF_FCCU_CURRENTS_FRAME_ID, currents_buf, sizeof(currents_buf));
 }
-
-/* ── BME280 ──────────────────────────────────────────────────────── */
 
 void fccu_bmp280_sensor_init()
 {
@@ -305,16 +280,13 @@ void fccu_bmp280_sensor2_read()
     sensor2.humidity    = mov_avg_push(&avg_bme77_h,
                               sensor_value_to_float(&sensor2.humidity_buffer));
 
-    /* FCCU_THERMAL */
-    {
-        struct candef_fccu_thermal_t msg = {
-            .bme76_temp     = (int16_t) (sensor.temperature  * 10.0f),
-            .bme76_humidity = (uint16_t)(sensor.humidity      * 10.0f),
-            .bme77_temp     = (int16_t) (sensor2.temperature  * 10.0f),
-            .bme77_humidity = (uint16_t)(sensor2.humidity     * 10.0f),
-        };
-        uint8_t buf[CANDEF_FCCU_THERMAL_LENGTH];
-        candef_fccu_thermal_pack(buf, &msg, sizeof(buf));
-        can_send_(can.can_device, CANDEF_FCCU_THERMAL_FRAME_ID, buf, sizeof(buf));
-    }
+    struct candef_fccu_thermal_t thermal_msg = {
+        .bme76_temp     = (int16_t) (sensor.temperature  * 10.0f),
+        .bme76_humidity = (uint16_t)(sensor.humidity      * 10.0f),
+        .bme77_temp     = (int16_t) (sensor2.temperature  * 10.0f),
+        .bme77_humidity = (uint16_t)(sensor2.humidity     * 10.0f),
+    };
+    uint8_t thermal_buf[CANDEF_FCCU_THERMAL_LENGTH];
+    candef_fccu_thermal_pack(thermal_buf, &thermal_msg, sizeof(thermal_buf));
+    can_send_(can.can_device, CANDEF_FCCU_THERMAL_FRAME_ID, thermal_buf, sizeof(thermal_buf));
 }

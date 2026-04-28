@@ -2,16 +2,16 @@
 #include "fccu_analog.h"
 #include "fccu_fan.h"
 #include "fccu_digital.h"
+#include "fccu_flow.h"
 #include "fccu_log.h"
 #include "can.h"
+#include "candef.h"
 #include "counter.h"
 
 #include <zephyr/logging/log.h>
 
 LOG_MODULE_REGISTER(fccu, LOG_LEVEL_INF);
 
-
-/* ── Variables ───────────────────────────────────────────────────── */
 
 volatile fccu_flags_t flags;
 volatile fccu_state_t state = STOPPED;
@@ -27,8 +27,6 @@ static fccu_counter_t counter = {
     .counter2                        = DEVICE_DT_GET(DT_ALIAS(counter2)),
     .counter3                        = DEVICE_DT_GET(DT_ALIAS(counter3)),
 };
-
-/* ── CAN state → LED ─────────────────────────────────────────────── */
 
 static void can_state_change_cb(const struct device *dev, enum can_state cs,
                                 struct can_bus_err_cnt err_cnt, void *user_data);
@@ -68,8 +66,6 @@ static void can_state_change_cb(const struct device *dev, enum can_state cs,
     }
 }
 
-/* ── CAN init ────────────────────────────────────────────────────── */
-
 static void fccu_can_init()
 {
     status_led_init(&can.can_status_led, NULL);
@@ -79,11 +75,8 @@ static void fccu_can_init()
     k_work_reschedule(&can_led_work, K_SECONDS(2));
 }
 
-/* ── Counters ────────────────────────────────────────────────────── */
-
 static void counter_cb_measurements(const struct device *dev, void *user_data)
 {
-    //LOG_DBG("Counter tick");
     flags.measurements_tick = true;
 }
 
@@ -97,8 +90,6 @@ static void fccu_counters_set_interrupts()
     counter_set_alarm(counter.counter_measurements, 0,
                       counter_cb_measurements, 1000000);
 }
-
-/* ── CAN state frame ─────────────────────────────────────────────── */
 
 static void fccu_can_send_state()
 {
@@ -114,8 +105,6 @@ static void fccu_can_send_state()
     can_send_(can.can_device, CANDEF_FCCU_STATE_FRAME_ID, buf, sizeof(buf));
 }
 
-/* ── Init ────────────────────────────────────────────────────────── */
-
 void fccu_init()
 {
     flags.measurements_tick = false;
@@ -127,13 +116,12 @@ void fccu_init()
     fccu_valves_init();
     fccu_buttons_init();
     fccu_fan_init();
+    fccu_flow_init();
     fccu_counters_init();
     fccu_counters_set_interrupts();
     fccu_bmp280_sensor_init();
     fccu_bmp280_sensor2_init();
 }
-
-/* ── Main tick ───────────────────────────────────────────────────── */
 
 void fccu_on_tick()
 {
@@ -142,6 +130,7 @@ void fccu_on_tick()
         fccu_bmp280_sensor2_read();
         fccu_adc_read();
         fccu_ads1015_read();
+        fccu_flow_on_tick();
         fccu_can_send_state();
 
         if (state == RUNNING) {
