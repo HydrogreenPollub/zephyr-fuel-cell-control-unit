@@ -3,12 +3,13 @@
 
 #include "fccu.h"
 
-extern fccu_fan_t fan;            /**< Fan GPIO and PWM hardware resources. */
-extern uint8_t   fan_pwm_percent; /**< Current fan PWM duty cycle (0–100 %). */
+extern fccu_fan_t fan;             /**< Fan GPIO and PWM hardware resources. */
+extern uint8_t    fan_pwm_percent; /**< Current fan PWM duty cycle (0–100 %). */
 
-extern float   g_fan_target_c;       /**< Fan proportional controller setpoint (°C). */
-extern bool    g_fan_manual;          /**< True when fan is in manual duty override mode. */
-extern uint8_t g_fan_manual_duty_pct; /**< Manual duty cycle (0–100 %). Used when g_fan_manual is true. */
+extern float g_fan_target_c; /**< Fan proportional controller setpoint (°C). */
+extern bool  g_fan_manual;   /**< True when fan is in manual duty override mode. */
+extern uint8_t
+    g_fan_manual_duty_pct; /**< Manual duty cycle (0–100 %). Used when g_fan_manual is true. */
 
 /**
  * @brief Initialise the fan GPIO enable pin and PWM output.

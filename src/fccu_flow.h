@@ -3,8 +3,9 @@
 
 #include "fccu.h"
 
-extern float flow_rate_lnmin; /**< Current volumetric flow rate in normalised litres per minute (Ln/min). */
-extern float flow_total_ln;   /**< Accumulated total flow volume in normalised litres (Ln). */
+extern float
+    flow_rate_lnmin; /**< Current volumetric flow rate in normalised litres per minute (Ln/min). */
+extern float flow_total_ln; /**< Accumulated total flow volume in normalised litres (Ln). */
 
 /**
  * @brief Configure the flowmeter pulse input GPIO and attach the edge ISR.

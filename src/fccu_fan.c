@@ -9,9 +9,9 @@ fccu_fan_t fan = {
     .fan_pwm    = PWM_DT_SPEC_GET(DT_ALIAS(fan_pwm)),
 };
 
-uint8_t fan_pwm_percent   = 0;
-float   g_fan_target_c    = FAN_TARGET_C;
-bool    g_fan_manual      = false;
+uint8_t fan_pwm_percent       = 0;
+float   g_fan_target_c        = FAN_TARGET_C;
+bool    g_fan_manual          = false;
 uint8_t g_fan_manual_duty_pct = 0;
 
 void fccu_fan_init()
@@ -37,6 +37,21 @@ void fccu_fan_off()
 
 void fccu_fan_pwm_set(uint8_t pwm_percent)
 {
+    if (pwm_percent > 100U) {
+        pwm_percent = 100U;
+    }
+
+    if (pwm_percent == 0U) {
+        pwm_set_pulse_width_percent(&fan.fan_pwm, 0U);
+        if (flags.fan_on) {
+            fccu_fan_off();
+        }
+        return;
+    }
+
+    if (!flags.fan_on) {
+        fccu_fan_on();
+    }
     pwm_set_pulse_width_percent(&fan.fan_pwm, pwm_percent);
 }
 
@@ -46,7 +61,9 @@ uint8_t fccu_fan_compute_duty(float temp_c)
         return FAN_MIN_DUTY_PCT;
     }
     float k = (temp_c - g_fan_target_c) / FAN_FULLSCALE_C;
-    if (k < 0.0f) k = 0.0f;
-    if (k > 1.0f) k = 1.0f;
+    if (k < 0.0f)
+        k = 0.0f;
+    if (k > 1.0f)
+        k = 1.0f;
     return (uint8_t)(FAN_MIN_DUTY_PCT + k * (100 - FAN_MIN_DUTY_PCT));
 }

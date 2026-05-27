@@ -4,6 +4,8 @@
 #include "fccu_digital.h"
 #include "fccu_flow.h"
 #include "fccu_log.h"
+#include "fccu_settings.h"
+#include "fccu_can_rx.h"
 #include "can.h"
 #include "candef.h"
 #include "counter.h"
@@ -11,7 +13,6 @@
 #include <zephyr/logging/log.h>
 
 LOG_MODULE_REGISTER(fccu, LOG_LEVEL_INF);
-
 
 volatile fccu_flags_t flags;
 volatile fccu_state_t state = STOPPED;
@@ -38,7 +39,7 @@ static K_WORK_DELAYABLE_DEFINE(can_led_work, can_led_work_fn);
 
 static void can_led_work_fn(struct k_work *work)
 {
-    enum can_state cs;
+    enum can_state         cs;
     struct can_bus_err_cnt ec;
     if (can_get_state(can.can_device, &cs, &ec) == 0) {
         can_state_change_cb(can.can_device, cs, ec, NULL);
@@ -89,17 +90,16 @@ static void fccu_counters_init()
 
 static void fccu_counters_set_interrupts()
 {
-    counter_set_alarm(counter.counter_measurements, 0,
-                      counter_cb_measurements, 1000000);
+    counter_set_alarm(counter.counter_measurements, 0, counter_cb_measurements, 1000000);
 }
 
-static void fccu_can_send_state()
+void fccu_can_send_state()
 {
     struct candef_fccu_state_t msg = {
         .running_state = (uint8_t)state,
-        .main_valve    = flags.main_valve_on  ? 1u : 0u,
+        .main_valve    = flags.main_valve_on ? 1u : 0u,
         .purge_valve   = flags.purge_valve_on ? 1u : 0u,
-        .fan_on        = flags.fan_on         ? 1u : 0u,
+        .fan_on        = flags.fan_on ? 1u : 0u,
         .fan_duty_pct  = fan_pwm_percent,
     };
     uint8_t buf[CANDEF_FCCU_STATE_LENGTH];
@@ -123,18 +123,28 @@ void fccu_init()
     fccu_counters_set_interrupts();
     fccu_bmp280_sensor_init();
     fccu_bmp280_sensor2_init();
+    fccu_settings_init();
+    fccu_can_rx_init();
 }
 
 void fccu_on_tick()
 {
+    static int64_t fast_can_last_ms;
+    static uint32_t status_can_ticks;
+    static uint32_t ads_can_ticks = FCCU_CAN_ADS_PERIOD_S - 1U;
+
+    int64_t now_ms = k_uptime_get();
+    if (now_ms - fast_can_last_ms >= FCCU_CAN_FAST_PERIOD_MS) {
+        fccu_can_send_state();
+        fccu_hydrogen_can_send();
+        fast_can_last_ms = now_ms;
+    }
+
     if (flags.measurements_tick) {
         fccu_bmp280_sensor_read();
         fccu_bmp280_sensor2_read();
         fccu_adc_read();
-        fccu_ads1015_read();
         fccu_flow_on_tick();
-        fccu_can_send_state();
-        fccu_flow_can_send();
 
         if (g_fan_manual) {
             fan_pwm_percent = g_fan_manual_duty_pct;
@@ -144,12 +154,20 @@ void fccu_on_tick()
             fan_pwm_percent = 0;
         }
 
-        if (fan_pwm_percent > 0 && !flags.fan_on) {
-            fccu_fan_on();
-        } else if (fan_pwm_percent == 0 && flags.fan_on) {
-            fccu_fan_off();
-        }
         fccu_fan_pwm_set(fan_pwm_percent);
+
+        if (++ads_can_ticks >= FCCU_CAN_ADS_PERIOD_S) {
+            fccu_ads1015_read();
+            fccu_ads1015_can_send();
+            ads_can_ticks = 0;
+        }
+
+        if (++status_can_ticks >= FCCU_CAN_STATUS_PERIOD_S) {
+            fccu_adc_can_send();
+            fccu_bmp280_can_send();
+            fccu_flow_can_send();
+            status_can_ticks = 0;
+        }
 
         if (state == RUNNING) {
             purge_periodic_ticks++;
@@ -159,7 +177,7 @@ void fccu_on_tick()
                 case PURGE_MODE_THRESHOLD: {
                     float fc_past;
                     if (fccu_log_get_fc_ago(PURGE_COMPARE_SAMPLES, &fc_past) &&
-                        fc_past - adc.fuel_cell_voltage.voltage >= g_purge_trigger_v) {
+                        fc_past - adc.fuel_cell_voltage.voltage >= g_purge_threshold_v) {
                         LOG_INF("Threshold purge: FC drop %.2f V",
                                 (double)(fc_past - adc.fuel_cell_voltage.voltage));
                         fccu_purge_valve_on();
@@ -183,8 +201,10 @@ void fccu_on_tick()
             .ts_ms     = k_uptime_get(),
             .fc_v      = adc.fuel_cell_voltage.voltage,
             .sc_v      = adc.supercap_voltage.voltage,
-            .temp_fc_c = ads1015_data.fc_temp_c,
             .lp_bar    = ads1015_data.lp_sensor,
+            .flow_rate = flow_rate_lnmin,
+            .fan_duty  = fan_pwm_percent,
+            .ntc_t     = adc.temp_c,
             .bme76_t   = sensor.temperature,
             .bme76_h   = sensor.humidity,
             .bme76_p   = sensor.pressure,
@@ -193,8 +213,7 @@ void fccu_on_tick()
             .bme77_p   = sensor2.pressure,
         };
         for (int i = 0; i < 4; i++) {
-            s.ads48[i] = ads1015_data.ads48[i];
-            s.ads49[i] = ads1015_data.ho_current[i];
+            s.ho_current[i] = ads1015_data.ho_current[i];
         }
         fccu_log_add(&s);
 

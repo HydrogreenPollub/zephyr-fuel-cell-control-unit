@@ -7,15 +7,16 @@
  * @brief Purge valve trigger mode.
  */
 typedef enum {
-    PURGE_MODE_THRESHOLD, /**< Purge when FC voltage drops by g_purge_trigger_v. */
+    PURGE_MODE_THRESHOLD, /**< Purge when FC voltage drops by g_purge_threshold_v. */
     PURGE_MODE_PERIODIC,  /**< Purge at a fixed interval defined by g_purge_periodic_interval_s. */
     PURGE_MODE_MANUAL,    /**< Purge only on explicit command (shell or button short-press). */
 } fccu_purge_mode_t;
 
-extern fccu_valve_pin_t   valve_pin;                  /**< Valve GPIO pin specs. */
-extern float              g_purge_trigger_v;           /**< FC voltage drop threshold for PURGE_MODE_THRESHOLD (V). */
-extern fccu_purge_mode_t  g_purge_mode;                /**< Active purge trigger mode. */
-extern uint32_t           g_purge_periodic_interval_s; /**< Interval between periodic purges (s). */
+extern fccu_valve_pin_t valve_pin; /**< Valve GPIO pin specs. */
+extern float g_purge_threshold_v;  /**< FC voltage drop threshold for PURGE_MODE_THRESHOLD (V). */
+extern fccu_purge_mode_t g_purge_mode;                /**< Active purge trigger mode. */
+extern uint32_t          g_purge_periodic_interval_s; /**< Interval between periodic purges (s). */
+extern uint32_t          g_purge_duration_ms; /**< Duration of each purge valve pulse (ms). */
 
 /**
  * @brief Initialise main and purge valve GPIO pins to inactive state.

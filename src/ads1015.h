@@ -12,10 +12,10 @@
  * @brief ADS1015 internal register address pointer values.
  */
 typedef enum {
-    CONVERSION_REGISTER  = 0x00, /**< Most recent conversion result. */
-    CONFIG_REGISTER      = 0x01, /**< Device configuration and OS bit. */
-    LOW_TRESH_REGISTER   = 0x02, /**< Comparator low-threshold register. */
-    HIGH_TRESH_REGISTER  = 0x03, /**< Comparator high-threshold register. */
+    CONVERSION_REGISTER = 0x00, /**< Most recent conversion result. */
+    CONFIG_REGISTER     = 0x01, /**< Device configuration and OS bit. */
+    LOW_TRESH_REGISTER  = 0x02, /**< Comparator low-threshold register. */
+    HIGH_TRESH_REGISTER = 0x03, /**< Comparator high-threshold register. */
 } ads1015_addr_ptr_reg_t;
 
 /**
@@ -129,30 +129,30 @@ typedef enum {
  * @brief Comparator configuration bit-fields (maps to config register bits 0–4).
  */
 typedef struct {
-    ads1015_comp_mode_t      comp_mode     : 1; /**< Comparator mode. */
-    ads1015_comp_polarity_t  comp_polarity : 1; /**< ALERT/RDY polarity. */
-    ads1015_comp_latching_t  comp_latching : 1; /**< Latching behaviour. */
-    ads1015_comp_queue_t     comp_queue    : 2; /**< Queue / disable setting. */
+    ads1015_comp_mode_t     comp_mode : 1;     /**< Comparator mode. */
+    ads1015_comp_polarity_t comp_polarity : 1; /**< ALERT/RDY polarity. */
+    ads1015_comp_latching_t comp_latching : 1; /**< Latching behaviour. */
+    ads1015_comp_queue_t    comp_queue : 2;    /**< Queue / disable setting. */
 } ads1015_comp_t;
 
 /**
  * @brief ADC configuration bit-fields (maps to config register bits 5–15).
  */
 typedef struct {
-    ads1015_input_mux_config_t    mux_config   : 3; /**< Input multiplexer selection. */
-    ads1015_prog_gain_amplifier_t gain         : 3; /**< PGA full-scale range. */
-    ads1015_device_mode_t         device_mode  : 1; /**< Continuous or single-shot. */
-    ads1015_data_rate_t           data_rate    : 3; /**< Samples per second. */
+    ads1015_input_mux_config_t    mux_config : 3;  /**< Input multiplexer selection. */
+    ads1015_prog_gain_amplifier_t gain : 3;        /**< PGA full-scale range. */
+    ads1015_device_mode_t         device_mode : 1; /**< Continuous or single-shot. */
+    ads1015_data_rate_t           data_rate : 3;   /**< Samples per second. */
 } ads1015_config_t;
 
 /**
  * @brief ADS1015 device handle holding I2C reference and current configuration.
  */
 typedef struct {
-    const struct i2c_dt_spec *i2c;   /**< Zephyr I2C devicetree spec for this device. */
-    uint16_t        i2c_addr;        /**< I2C address (normally ADS1015_I2C_ADDRESS). */
-    ads1015_config_t  config;        /**< Current ADC configuration. */
-    ads1015_comp_t    comparator;    /**< Current comparator configuration. */
+    const struct i2c_dt_spec *i2c;        /**< Zephyr I2C devicetree spec for this device. */
+    uint16_t                  i2c_addr;   /**< I2C address (normally ADS1015_I2C_ADDRESS). */
+    ads1015_config_t          config;     /**< Current ADC configuration. */
+    ads1015_comp_t            comparator; /**< Current comparator configuration. */
 } ads1015_type_t;
 
 /**
@@ -189,7 +189,8 @@ void ads1015_write_reg(ads1015_type_t *ads1015_dev, uint8_t reg, uint8_t *data, 
  * @param data_read   Buffer to store the read bytes.
  * @param data_len    Number of bytes to read.
  */
-void ads1015_read_reg(ads1015_type_t *ads1015_dev, uint8_t reg, uint8_t *data_read, size_t data_len);
+void ads1015_read_reg(ads1015_type_t *ads1015_dev, uint8_t reg, uint8_t *data_read,
+                      size_t data_len);
 
 /**
  * @brief Trigger a single-shot conversion and return the raw 12-bit result.
@@ -201,7 +202,8 @@ void ads1015_read_reg(ads1015_type_t *ads1015_dev, uint8_t reg, uint8_t *data_re
  * @param channel     Channel to sample (ADC_CHANNEL_0 … ADC_CHANNEL_3).
  * @return Raw signed 12-bit ADC result.
  */
-int16_t ads1015_read_channel_raw_single_shot(ads1015_type_t *ads1015_dev, ads1015_adc_channel_t channel);
+int16_t ads1015_read_channel_raw_single_shot(ads1015_type_t       *ads1015_dev,
+                                             ads1015_adc_channel_t channel);
 
 /**
  * @brief Convert a raw 12-bit ADC result to a voltage using the current PGA setting.

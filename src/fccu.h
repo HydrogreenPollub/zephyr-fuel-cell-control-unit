@@ -10,48 +10,52 @@
 #include "status_led.h"
 
 /** @brief Duration of a single purge valve pulse in milliseconds. */
-#define PURGE_DURATION_MS           300
+#define PURGE_DURATION_MS 300
 
 /** @brief Number of past samples compared for threshold-based purge detection. */
-#define PURGE_COMPARE_SAMPLES       180
+#define PURGE_COMPARE_SAMPLES 180
 
 /** @brief Fuel cell voltage drop (V) that triggers a threshold-mode purge. */
-#define PURGE_TRIGGER_FC_DROP_V     5.0f
+#define PURGE_THRESHOLD_FC_DROP_V 5.0f
 
 /** @brief Fan proportional controller target temperature in degrees Celsius. */
-#define FAN_TARGET_C                50.0f
+#define FAN_TARGET_C 50.0f
 
 /** @brief Temperature deadband around FAN_TARGET_C where fan duty is clamped to minimum. */
-#define FAN_DEADBAND_C              1.0f
+#define FAN_DEADBAND_C 1.0f
 
 /** @brief Temperature above FAN_TARGET_C at which fan duty reaches 100 %. */
-#define FAN_FULLSCALE_C             10.0f
+#define FAN_FULLSCALE_C 10.0f
 
 /** @brief Minimum fan duty cycle percentage when the fan is running. */
-#define FAN_MIN_DUTY_PCT            20
+#define FAN_MIN_DUTY_PCT 20
 
 /** @brief Default periodic purge interval in seconds. */
-#define PURGE_PERIODIC_INTERVAL_S   60
+#define PURGE_PERIODIC_INTERVAL_S 60
 
 /** @brief Number of samples averaged for HO-10P zero-current calibration. */
-#define HO_ZERO_CAL_SAMPLES         100
+#define HO_ZERO_CAL_SAMPLES 100
 
 /** @brief HO-10P current sensor conversion factor: amperes per volt. */
-#define HO_I_PER_V                  (-12.2449f)
+#define HO_I_PER_V (-12.2449f)
 
 /** @brief Flowmeter pulse-to-volume factor: normalised litres per pulse. */
-#define FLOW_LN_PER_PULSE           0.01f
+#define FLOW_LN_PER_PULSE 0.01f
 
 /** @brief Moving average window size used for all sensor smoothing. */
-#define MOV_AVG_SIZE                20
+#define MOV_AVG_SIZE 20
+
+#define FCCU_CAN_FAST_PERIOD_MS 100
+#define FCCU_CAN_STATUS_PERIOD_S 1
+#define FCCU_CAN_ADS_PERIOD_S 5
 
 /**
  * @brief Single ADC channel with its raw count and converted voltage.
  */
 typedef struct {
     struct adc_dt_spec adc_channel; /**< Zephyr DT ADC channel spec. */
-    int16_t raw_value;              /**< Most recent raw ADC count. */
-    float   voltage;                /**< Converted and averaged voltage (V). */
+    int16_t            raw_value;   /**< Most recent raw ADC count. */
+    float              voltage;     /**< Converted and averaged voltage (V). */
 } fccu_adc_device_t;
 
 /**
@@ -60,7 +64,8 @@ typedef struct {
 typedef struct {
     fccu_adc_device_t fuel_cell_voltage; /**< Fuel cell stack voltage channel. */
     fccu_adc_device_t supercap_voltage;  /**< Supercapacitor voltage channel. */
-    fccu_adc_device_t temp_sensor;       /**< Onboard NTC temperature channel. */
+    fccu_adc_device_t temp_sensor;       /**< NTC temperature channel on GPIO10 (ADC1 ch9). */
+    float             temp_c;            /**< Averaged NTC temperature (°C). */
 } fccu_adc_t;
 
 /**
@@ -69,6 +74,8 @@ typedef struct {
 typedef struct {
     float ads48[4];      /**< Raw ADS1015@48 channel voltages (V). */
     float ads49[4];      /**< Raw ADS1015@49 channel voltages (V). */
+    int16_t ads48_raw[4]; /**< Raw ADS1015@48 ADC counts. */
+    int16_t ads49_raw[4]; /**< Raw ADS1015@49 ADC counts. */
     float fc_current;    /**< Fuel cell current derived from ads48[0] (A). */
     float fc_temp_c;     /**< Fuel cell NTC temperature from ads48[1] (°C). */
     float hp_sensor;     /**< High-pressure sensor voltage from ads48[2] (V). */
@@ -104,13 +111,13 @@ typedef struct {
  * @brief BME280 environmental sensor state and averaged readings.
  */
 typedef struct {
-    const struct device    *sensor;             /**< Zephyr sensor device handle. */
-    struct sensor_value     temperature_buffer; /**< Raw Zephyr temperature value. */
-    struct sensor_value     pressure_buffer;    /**< Raw Zephyr pressure value. */
-    struct sensor_value     humidity_buffer;    /**< Raw Zephyr humidity value. */
-    float temperature; /**< Averaged temperature (°C). */
-    float pressure;    /**< Averaged pressure (hPa × 10). */
-    float humidity;    /**< Averaged relative humidity (%). */
+    const struct device *sensor;             /**< Zephyr sensor device handle. */
+    struct sensor_value  temperature_buffer; /**< Raw Zephyr temperature value. */
+    struct sensor_value  pressure_buffer;    /**< Raw Zephyr pressure value. */
+    struct sensor_value  humidity_buffer;    /**< Raw Zephyr humidity value. */
+    float                temperature;        /**< Averaged temperature (°C). */
+    float                pressure;           /**< Averaged pressure (hPa × 10). */
+    float                humidity;           /**< Averaged relative humidity (%). */
 } bmp280_sensor_t;
 
 /**
@@ -127,9 +134,9 @@ typedef struct {
  * @brief Global state flags shared across all FCCU modules.
  */
 typedef struct {
-    bool main_valve_on;    /**< True when the main hydrogen valve is open. */
-    bool purge_valve_on;   /**< True while a purge valve pulse is active. */
-    bool fan_on;           /**< True when the fan enable GPIO is asserted. */
+    bool main_valve_on;     /**< True when the main hydrogen valve is open. */
+    bool purge_valve_on;    /**< True while a purge valve pulse is active. */
+    bool fan_on;            /**< True when the fan enable GPIO is asserted. */
     bool measurements_tick; /**< Set by the 1 Hz counter ISR; cleared after processing. */
 } fccu_flags_t;
 
@@ -154,7 +161,7 @@ extern volatile fccu_flags_t flags; /**< Global FCCU state flags. */
 extern volatile fccu_state_t state; /**< Current operating state of the fuel cell. */
 extern fccu_can_t            can;   /**< CAN bus device and status LED. */
 
-extern float g_purge_trigger_v; /**< FC voltage drop threshold for threshold-mode purge (V). */
+extern float g_purge_threshold_v; /**< FC voltage drop threshold for threshold-mode purge (V). */
 
 /**
  * @brief Initialise all FCCU subsystems.
@@ -174,5 +181,7 @@ void fccu_init();
  * Zephyr threads.
  */
 void fccu_on_tick();
+
+void fccu_can_send_state();
 
 #endif /* FCCU_H */

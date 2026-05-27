@@ -1,0 +1,57 @@
+---
+Language: Cpp
+BasedOnStyle: LLVM
+
+# Indentation
+IndentWidth:        4
+TabWidth:           4
+UseTab:             Never
+ColumnLimit:        100
+
+# Braces: function definitions on new line, control flow (if/for/while) on same line
+BreakBeforeBraces:  Linux
+
+# Pointers: int *ptr, not int* ptr
+PointerAlignment:   Right
+
+# Align consecutive declarations, assignments, and #defines
+AlignConsecutiveDeclarations:
+  Enabled:          true
+  AcrossEmptyLines: false
+  AcrossComments:   false
+AlignConsecutiveAssignments:
+  Enabled:          true
+  AcrossEmptyLines: false
+  AcrossComments:   false
+AlignConsecutiveMacros:
+  Enabled:          true
+  AcrossEmptyLines: false
+  AcrossComments:   false
+
+# Trailing comments (/**< ... */ on same line as field)
+AlignTrailingComments:
+  Kind:             Always
+  OverEmptyLines:   0
+
+# Keep // comment reflow off — doxygen blocks are hand-formatted
+ReflowComments:     false
+
+# No short functions or ifs on a single line
+AllowShortFunctionsOnASingleLine:     None
+AllowShortIfStatementsOnASingleLine:  Never
+AllowShortLoopsOnASingleLine:         false
+AllowShortBlocksOnASingleLine:        Never
+
+# One empty line max
+MaxEmptyLinesToKeep: 1
+KeepEmptyLinesAtTheStartOfBlocks: false
+
+# Spaces
+SpaceBeforeParens:      ControlStatements
+SpacesInParentheses:    false
+SpaceInEmptyParentheses: false
+SpaceAfterCStyleCast:   false
+
+# Includes: preserve manual grouping (Zephyr headers, project headers)
+SortIncludes:   Never
+IncludeBlocks:  Preserve

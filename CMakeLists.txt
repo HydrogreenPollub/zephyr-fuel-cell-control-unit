@@ -32,6 +32,8 @@ target_sources(app PRIVATE
         src/fccu_flow.c
         src/fccu_log.c
         src/fccu_shell.c
+        src/fccu_settings.c
+        src/fccu_can_rx.c
         peripherals/can.c
         peripherals/gpio.c
         peripherals/adc.c

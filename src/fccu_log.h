@@ -8,25 +8,29 @@
 /** @brief Maximum number of samples retained in the circular log buffer. */
 #define FCCU_LOG_CAPACITY 200
 
+/** @brief When false, fccu_log_add() is a no-op. Toggled by `logs enable/disable`. */
+extern bool g_log_enabled;
+
 /**
  * @brief One measurement snapshot stored in the log buffer.
  *
  * All fields are populated by fccu_on_tick() once per second.
  */
 typedef struct {
-    int64_t ts_ms;     /**< Kernel uptime timestamp in milliseconds. */
-    float   fc_v;      /**< Fuel cell stack voltage (V). */
-    float   sc_v;      /**< Supercapacitor voltage (V). */
-    float   temp_fc_c; /**< Fuel cell NTC temperature (°C). */
-    float   lp_bar;    /**< Low-pressure hydrogen sensor reading (bar). */
-    float   ads48[4];  /**< ADS1015@48 channel voltages (V). */
-    float   ads49[4];  /**< ADS1015@49 HO-10P currents (A). */
-    float   bme76_t;   /**< BME280@76 temperature (°C). */
-    float   bme76_h;   /**< BME280@76 relative humidity (%). */
-    float   bme76_p;   /**< BME280@76 pressure (hPa × 10). */
-    float   bme77_t;   /**< BME280@77 temperature (°C). */
-    float   bme77_h;   /**< BME280@77 relative humidity (%). */
-    float   bme77_p;   /**< BME280@77 pressure (hPa × 10). */
+    int64_t ts_ms;         /**< Kernel uptime timestamp in milliseconds. */
+    float   fc_v;          /**< Fuel cell stack voltage (V). */
+    float   sc_v;          /**< Supercapacitor voltage (V). */
+    float   lp_bar;        /**< Low-pressure hydrogen sensor reading (bar). */
+    float   flow_rate;     /**< Hydrogen flow rate (Ln/min). */
+    uint8_t fan_duty;      /**< Fan PWM duty cycle (%). */
+    float   ntc_t;         /**< NTC temperature from GPIO10 (ADC1 ch9) in °C. */
+    float   ho_current[4]; /**< HO-10P hall-effect currents, channels 0–3 (A). */
+    float   bme76_t;       /**< BME280@76 temperature (°C). */
+    float   bme76_h;       /**< BME280@76 relative humidity (%). */
+    float   bme76_p;       /**< BME280@76 pressure (hPa × 10). */
+    float   bme77_t;       /**< BME280@77 temperature (°C). */
+    float   bme77_h;       /**< BME280@77 relative humidity (%). */
+    float   bme77_p;       /**< BME280@77 pressure (hPa × 10). */
 } fccu_log_sample_t;
 
 /**

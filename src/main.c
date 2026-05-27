@@ -12,7 +12,8 @@
 
 LOG_MODULE_REGISTER(app);
 
-int main() {
+int main()
+{
     LOG_INF("Starting program on board: %s\n", CONFIG_BOARD);
 
     fccu_init();

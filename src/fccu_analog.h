@@ -3,11 +3,13 @@
 
 #include "fccu.h"
 
+extern bool
+    g_analog_log_enabled; /**< When false, periodic FC_V/LP/flow LOG_INF lines are suppressed. */
 extern fccu_adc_t         adc;          /**< Native ESP32 ADC measurement data. */
 extern bmp280_sensor_t    sensor;       /**< BME280 at I2C address 0x76. */
 extern bmp280_sensor_t    sensor2;      /**< BME280 at I2C address 0x77. */
 extern ads1015_adc_data_t ads1015_data; /**< Most recent ADS1015 measurements. */
-extern float              ho_zero_v[4]; /**< HO-10P zero-current calibration offsets (V), one per channel. */
+extern float ho_zero_v[4]; /**< HO-10P zero-current calibration offsets (V), one per channel. */
 
 /**
  * @brief Initialise the native ESP32 ADC channels.
@@ -18,12 +20,16 @@ extern float              ho_zero_v[4]; /**< HO-10P zero-current calibration off
 void fccu_adc_init();
 
 /**
- * @brief Read all native ADC channels and publish telemetry CAN frames.
+ * @brief Read all native ADC channels.
  *
  * Reads fuel cell voltage, supercap voltage, and temperature; applies
- * moving-average filtering; then sends FCCU_POWER and FCCU_HYDROGEN CAN frames.
+ * moving-average filtering.
  */
 void fccu_adc_read();
+
+void fccu_adc_can_send();
+
+void fccu_hydrogen_can_send();
 
 /**
  * @brief Probe ADS1015 ICs on I2C and run HO-10P zero calibration.
@@ -35,13 +41,15 @@ void fccu_adc_read();
 void fccu_ads1015_init();
 
 /**
- * @brief Read both ADS1015 ICs and publish the FCCU_CURRENTS CAN frame.
+ * @brief Read both ADS1015 ICs.
  *
  * Skips a device if it was not detected during init. Applies moving-average
  * filtering and derives fc_current, fc_temp_c, hp_sensor, lp_sensor, and
  * ho_current from the raw channel voltages.
  */
 void fccu_ads1015_read();
+
+void fccu_ads1015_can_send();
 
 /**
  * @brief Verify that BME280 at I2C address 0x76 is ready.
@@ -70,12 +78,13 @@ void fccu_bmp280_sensor2_init();
 void fccu_bmp280_sensor_read();
 
 /**
- * @brief Fetch one sample from BME280@77, update sensor2, and send FCCU_THERMAL.
+ * @brief Fetch one sample from BME280@77 and update sensor2.
  *
  * Calls sensor_sample_fetch() and reads all channels into sensor2 with
- * moving-average smoothing. On I2C failure the bus is recovered. On success,
- * sends a FCCU_THERMAL CAN frame with temperature and humidity from both sensors.
+ * moving-average smoothing. On I2C failure the bus is recovered.
  */
 void fccu_bmp280_sensor2_read();
+
+void fccu_bmp280_can_send();
 
 #endif /* FCCU_ANALOG_H */
