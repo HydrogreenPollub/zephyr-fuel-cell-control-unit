@@ -85,14 +85,10 @@ static void ext_click_fn(struct k_work *work)
     if (clicks == 1) {
         if (state == RUNNING) {
             LOG_INF("External button: single click — stopping");
-            state = STOPPED;
-            fccu_main_valve_off();
-            g_purge_mode = PURGE_MODE_MANUAL;
+            fccu_stop();
         } else {
             LOG_INF("External button: single click — starting");
-            state = RUNNING;
-            fccu_main_valve_on();
-            g_purge_mode = PURGE_MODE_PERIODIC;
+            fccu_start();
         }
     } else if (clicks >= 2) {
         LOG_INF("External button: double click — manual purge");

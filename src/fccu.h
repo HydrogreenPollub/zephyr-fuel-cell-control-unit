@@ -45,9 +45,35 @@
 /** @brief Moving average window size used for all sensor smoothing. */
 #define MOV_AVG_SIZE 20
 
+/** @brief NTC divider supply voltage (V). */
+#define NTC_VCC_V 3.3f
+
+/** @brief NTC divider fixed resistor (Ω). */
+#define NTC_R_FIXED_OHM 4700.0f
+
+/** @brief NTC nominal resistance at 25 °C (Ω). */
+#define NTC_R0_OHM 1000.0f
+
+/** @brief NTC β coefficient (K). */
+#define NTC_BETA_K 3950.0f
+
+/** @brief NTC reference temperature for R₀ (K). */
+#define NTC_T0_K 298.15f
+
 #define FCCU_CAN_FAST_PERIOD_MS 100
 #define FCCU_CAN_STATUS_PERIOD_S 1
 #define FCCU_CAN_ADS_PERIOD_S 5
+
+/** @brief Maximum age of MCU CAN fc_v before threshold purge is skipped (ms). */
+#define FC_V_CAN_STALE_MS 5000
+
+/**
+ * @brief Source for fuel cell voltage used in threshold purge and the log buffer.
+ */
+typedef enum {
+    FC_V_SOURCE_ADC, /**< Local ESP32 ADC (zephyr,user ch0). */
+    FC_V_SOURCE_CAN, /**< MCU_ANALOG_FUEL_CELL from CAN (mcu_data.fc_v). */
+} fccu_fc_v_source_t;
 
 /**
  * @brief Single ADC channel with its raw count and converted voltage.
@@ -137,7 +163,7 @@ typedef struct {
     bool main_valve_on;     /**< True when the main hydrogen valve is open. */
     bool purge_valve_on;    /**< True while a purge valve pulse is active. */
     bool fan_on;            /**< True when the fan enable GPIO is asserted. */
-    bool measurements_tick; /**< Set by the 1 Hz counter ISR; cleared after processing. */
+    bool measurements_tick; /**< Set by the 1 Hz k_timer; cleared after processing. */
 } fccu_flags_t;
 
 /**
@@ -162,6 +188,22 @@ extern volatile fccu_state_t state; /**< Current operating state of the fuel cel
 extern fccu_can_t            can;   /**< CAN bus device and status LED. */
 
 extern float g_purge_threshold_v; /**< FC voltage drop threshold for threshold-mode purge (V). */
+extern fccu_fc_v_source_t g_fc_v_source; /**< FC voltage source for threshold purge. */
+
+/**
+ * @brief Return true when the configured fc_v source has fresh data.
+ */
+bool fccu_fc_v_valid();
+
+/**
+ * @brief Get fuel cell voltage from the configured purge/log source.
+ */
+float fccu_fc_v_get();
+
+/**
+ * @brief Human-readable name for an fc_v source selector.
+ */
+const char *fccu_fc_v_source_name(fccu_fc_v_source_t src);
 
 /**
  * @brief Initialise all FCCU subsystems.
@@ -173,15 +215,30 @@ extern float g_purge_threshold_v; /**< FC voltage drop threshold for threshold-m
 void fccu_init();
 
 /**
+ * @brief Read sensors, update fan, log sample, and send slow CAN telemetry.
+ *
+ * Called from the 1 Hz system work item and from the hardware counter fallback.
+ */
+void fccu_process_measurements();
+
+/**
  * @brief Execute one iteration of the main FCCU control loop.
  *
- * When the 1 Hz measurements_tick flag is set, reads all sensors, updates fan
- * duty, evaluates purge logic, appends a log sample, and sends telemetry CAN
- * frames. Sleeps 100 ms at the end of each call to yield the CPU to other
- * Zephyr threads.
+ * Handles fast CAN telemetry and the counter-based measurement fallback.
+ * Periodic sensor reads run on the system workqueue via measurements_work.
  */
 void fccu_on_tick();
 
 void fccu_can_send_state();
+
+/**
+ * @brief Start the fuel cell system: open main valve, enable periodic purge.
+ */
+void fccu_start();
+
+/**
+ * @brief Stop the fuel cell system: close main valve, purge manual only.
+ */
+void fccu_stop();
 
 #endif /* FCCU_H */

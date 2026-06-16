@@ -14,6 +14,7 @@
 typedef struct {
     float   fc_v;       /**< Fuel cell output voltage (V). */
     float   fc_c;       /**< Fuel cell output current (A). */
+    float   hp_bar;     /**< Hydrogen high pressure (bar). */
     float   sc_v;       /**< Supercapacitor voltage (V). */
     float   sc_c;       /**< Supercapacitor current (A). */
     float   mc_v;       /**< Motor controller supply voltage (V). */

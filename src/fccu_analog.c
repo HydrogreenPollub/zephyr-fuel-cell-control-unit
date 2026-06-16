@@ -54,6 +54,10 @@ static mov_avg_t avg_fc_v, avg_sc_v, avg_ntc_t;
 
 static float mov_avg_push(mov_avg_t *m, float v)
 {
+    if (!isfinite(v)) {
+        return (m->count > 0) ? (m->sum / (float)m->count) : 0.0f;
+    }
+
     if (m->count < MOV_AVG_SIZE) {
         m->buf[m->idx] = v;
         m->sum += v;
@@ -77,21 +81,25 @@ static int fccu_i2c_early_recover()
 }
 SYS_INIT(fccu_i2c_early_recover, APPLICATION, 5);
 
-static float read_ntc_temperature(float adc_voltage)
+float fccu_ntc_voltage_to_celsius(float adc_voltage)
 {
-    const float VCC     = 3.3f;
-    const float R_FIXED = 4700.0f;
-    const float R0      = 1000.0f;
-    const float BETA    = 3950.0f;
-    const float T0      = 298.15f;
-
-    if (adc_voltage <= 0.0f || adc_voltage >= VCC) {
+    if (adc_voltage <= 0.0f || adc_voltage >= NTC_VCC_V) {
         return NAN;
     }
 
-    float R_ntc = R_FIXED * adc_voltage / (VCC - adc_voltage);
-    float invT  = (1.0f / T0) + (1.0f / BETA) * logf(R_ntc / R0);
-    return (1.0f / invT) - 273.15f;
+    double r_ntc = (double)NTC_R_FIXED_OHM * (double)adc_voltage /
+                   ((double)NTC_VCC_V - (double)adc_voltage);
+    if (r_ntc <= 0.0) {
+        return NAN;
+    }
+
+    double inv_t = (1.0 / (double)NTC_T0_K) +
+                   (1.0 / (double)NTC_BETA_K) * log(r_ntc / (double)NTC_R0_OHM);
+    if (inv_t <= 0.0) {
+        return NAN;
+    }
+
+    return (float)((1.0 / inv_t) - 273.15);
 }
 
 void fccu_adc_init()
@@ -115,7 +123,7 @@ void fccu_adc_read()
     int32_t val = (int32_t)adc.temp_sensor.raw_value;
     adc_raw_to_millivolts_dt(&adc.temp_sensor.adc_channel, &val);
     adc.temp_sensor.voltage = (float)val / 1000.0f;
-    adc.temp_c = mov_avg_push(&avg_ntc_t, read_ntc_temperature(adc.temp_sensor.voltage));
+    adc.temp_c = mov_avg_push(&avg_ntc_t, fccu_ntc_voltage_to_celsius(adc.temp_sensor.voltage));
 }
 
 void fccu_adc_can_send()
@@ -124,7 +132,6 @@ void fccu_adc_can_send()
         .fc_voltage = (uint16_t)(adc.fuel_cell_voltage.voltage * 1000.0f),
         .sc_voltage = (uint16_t)(adc.supercap_voltage.voltage * 1000.0f),
         .fc_current = (uint16_t)(ads1015_data.ads48[0] * 1000.0f),
-        .fc_temp_c  = (int16_t)(adc.temp_c * 10.0f),
     };
     uint8_t power_buf[CANDEF_FCCU_POWER_LENGTH];
     candef_fccu_power_pack(power_buf, &power_msg, sizeof(power_buf));
@@ -200,7 +207,7 @@ void fccu_ads1015_read()
                 mov_avg_push(&avg_ads48[ch], ads1015_convert_raw_value_to_voltage(&ads1015_48_dev, raw));
         }
         ads1015_data.fc_current = adc_map(ads1015_data.ads48[0], 1.494f, 0.484f, 0, 21);
-        ads1015_data.fc_temp_c  = read_ntc_temperature(ads1015_data.ads48[1]);
+        ads1015_data.fc_temp_c  = fccu_ntc_voltage_to_celsius(ads1015_data.ads48[1]);
         ads1015_data.hp_sensor  = ads1015_data.ads48[2];
         ads1015_data.lp_sensor  = ads1015_data.ads48[3];
     }

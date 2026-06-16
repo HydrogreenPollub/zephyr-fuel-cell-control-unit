@@ -23,6 +23,8 @@ static void rx_fuel_cell_cb(const struct device *dev, struct can_frame *frame, v
         msg.fuel_cell_output_voltage);
     mcu_data.fc_c = (float)candef_mcu_analog_fuel_cell_fuel_cell_output_current_decode(
         msg.fuel_cell_output_current);
+    mcu_data.hp_bar = (float)candef_mcu_analog_fuel_cell_hydrogen_high_pressure_decode(
+        msg.hydrogen_high_pressure);
     mcu_data.leakage_v = (float)candef_mcu_analog_fuel_cell_hydrogen_leakage_sensor_voltage_decode(
         msg.hydrogen_leakage_sensor_voltage);
     mcu_data.last_rx_ms = k_uptime_get();

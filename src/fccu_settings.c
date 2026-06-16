@@ -21,6 +21,7 @@ int fccu_settings_set(const char *key, size_t len, settings_read_cb read_cb, voi
     LOAD("purge_interval_s", g_purge_periodic_interval_s)
     LOAD("purge_duration_ms", g_purge_duration_ms)
     LOAD("purge_threshold_v", g_purge_threshold_v)
+    LOAD("fc_v_source", g_fc_v_source)
     LOAD("fan_manual", g_fan_manual)
     LOAD("fan_target_c", g_fan_target_c)
     LOAD("fan_duty_pct", g_fan_manual_duty_pct)
@@ -52,6 +53,7 @@ void fccu_settings_save()
                       sizeof(g_purge_periodic_interval_s));
     settings_save_one("fccu/purge_duration_ms", &g_purge_duration_ms, sizeof(g_purge_duration_ms));
     settings_save_one("fccu/purge_threshold_v", &g_purge_threshold_v, sizeof(g_purge_threshold_v));
+    settings_save_one("fccu/fc_v_source", &g_fc_v_source, sizeof(g_fc_v_source));
     settings_save_one("fccu/fan_manual", &g_fan_manual, sizeof(g_fan_manual));
     settings_save_one("fccu/fan_target_c", &g_fan_target_c, sizeof(g_fan_target_c));
     settings_save_one("fccu/fan_duty_pct", &g_fan_manual_duty_pct, sizeof(g_fan_manual_duty_pct));

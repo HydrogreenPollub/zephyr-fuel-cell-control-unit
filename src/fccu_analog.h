@@ -12,6 +12,18 @@ extern ads1015_adc_data_t ads1015_data; /**< Most recent ADS1015 measurements. *
 extern float ho_zero_v[4]; /**< HO-10P zero-current calibration offsets (V), one per channel. */
 
 /**
+ * @brief Convert an NTC divider tap voltage to temperature in degrees Celsius.
+ *
+ * Uses the Steinhart-Hart β equation with constants from fccu.h (NTC_VCC_V,
+ * NTC_R_FIXED_OHM, NTC_R0_OHM, NTC_BETA_K). Returns NAN when the voltage is
+ * out of range or the result is non-physical.
+ *
+ * @param adc_voltage Measured divider tap voltage in volts.
+ * @return Temperature in °C, or NAN on error.
+ */
+float fccu_ntc_voltage_to_celsius(float adc_voltage);
+
+/**
  * @brief Initialise the native ESP32 ADC channels.
  *
  * Calls adc_init() for the fuel cell voltage, supercapacitor voltage, and NTC
