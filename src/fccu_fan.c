@@ -25,14 +25,14 @@ void fccu_fan_on()
 {
     gpio_set(&fan.fan_on_pin);
     flags.fan_on = true;
-    LOG_INF("Fan on");
+    LOG_INF("Fan on (GPIO%d high — ground connected)", fan.fan_on_pin.pin);
 }
 
 void fccu_fan_off()
 {
     gpio_reset(&fan.fan_on_pin);
     flags.fan_on = false;
-    LOG_INF("Fan off");
+    LOG_INF("Fan off (GPIO%d low — ground disconnected)", fan.fan_on_pin.pin);
 }
 
 void fccu_fan_pwm_set(uint8_t pwm_percent)
@@ -66,4 +66,13 @@ uint8_t fccu_fan_compute_duty(float temp_c)
     if (k > 1.0f)
         k = 1.0f;
     return (uint8_t)(FAN_MIN_DUTY_PCT + k * (100 - FAN_MIN_DUTY_PCT));
+}
+
+void fccu_fan_apply_saved()
+{
+    if (g_fan_manual) {
+        fan_pwm_percent = g_fan_manual_duty_pct;
+        fccu_fan_pwm_set(fan_pwm_percent);
+        LOG_INF("Fan restored: manual duty %u%%", fan_pwm_percent);
+    }
 }

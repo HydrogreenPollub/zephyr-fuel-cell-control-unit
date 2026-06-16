@@ -61,10 +61,11 @@ static void print_status(const struct shell *sh)
     shell_print(sh, "");
 
     if (g_fan_manual) {
-        shell_print(sh, "%-16s duty=%u%%  mode=manual", "fan:", fan_pwm_percent);
+        shell_print(sh, "%-16s duty=%u%%  mode=manual  enable=%s", "fan:", fan_pwm_percent,
+                    flags.fan_on ? "on" : "off");
     } else {
-        shell_print(sh, "%-16s duty=%u%%  mode=auto  target=%.1f C", "fan:", fan_pwm_percent,
-                    (double)g_fan_target_c);
+        shell_print(sh, "%-16s duty=%u%%  mode=auto  target=%.1f C  enable=%s", "fan:",
+                    fan_pwm_percent, (double)g_fan_target_c, flags.fan_on ? "on" : "off");
     }
 
     shell_print(sh, "%-16s state=%s", "main_valve:", flags.main_valve_on ? "open" : "closed");
@@ -72,11 +73,23 @@ static void print_status(const struct shell *sh)
     const char *mode_str = g_purge_mode == PURGE_MODE_THRESHOLD  ? "threshold"
                            : g_purge_mode == PURGE_MODE_PERIODIC ? "periodic"
                                                                  : "manual";
-    shell_print(sh,
-                "%-16s state=%s  mode=%s  interval=%u s  threshold=%.2f V  duration=%u ms",
-                "purge_valve:",
-                flags.purge_valve_on ? "open" : "closed", mode_str, g_purge_periodic_interval_s,
-                (double)g_purge_threshold_v, g_purge_duration_ms);
+    shell_print(sh, "%-16s state=%s  mode=%s  fc_v=%s  threshold=%.2f V  interval=%u s  duration=%u ms",
+                "purge_valve:", flags.purge_valve_on ? "open" : "closed", mode_str,
+                fccu_fc_v_source_name(g_fc_v_source), (double)g_purge_threshold_v,
+                g_purge_periodic_interval_s, g_purge_duration_ms);
+
+    shell_print(sh, "");
+    if (mcu_data.last_rx_ms == 0) {
+        shell_print(sh, "mcu_can:         no frames received yet");
+    } else {
+        int64_t age_ms = k_uptime_get() - mcu_data.last_rx_ms;
+        shell_print(sh, "mcu_can:         last rx %lld ms ago", (long long)age_ms);
+        shell_print(sh, "  fc_v: %.3f V   fc_c: %.4f A   hp: %.1f bar", (double)mcu_data.fc_v,
+                    (double)mcu_data.fc_c, (double)mcu_data.hp_bar);
+        shell_print(sh, "  sc_v: %.3f V   sc_c: %.4f A", (double)mcu_data.sc_v, (double)mcu_data.sc_c);
+        shell_print(sh, "  mc_v: %.3f V   mc_c: %.4f A   leakage: %.4f V", (double)mcu_data.mc_v,
+                    (double)mcu_data.mc_c, (double)mcu_data.leakage_v);
+    }
 }
 
 int cmd_status(const struct shell *sh, size_t argc, char **argv)
@@ -141,11 +154,12 @@ SHELL_CMD_REGISTER(adc, NULL, "Show raw ADC values", cmd_adc);
 int cmd_fan_target(const struct shell *sh, size_t argc, char **argv)
 {
     if (argc < 2) {
-        shell_print(sh, "usage: fan target <Â°C>");
+        shell_print(sh, "usage: fan target <C>");
         return -EINVAL;
     }
     g_fan_target_c = strtof(argv[1], NULL);
     g_fan_manual   = false;
+    fccu_settings_save();
     shell_print(sh, "Fan target: %.1f C", (double)g_fan_target_c);
     return 0;
 }
@@ -165,7 +179,8 @@ int cmd_fan_duty(const struct shell *sh, size_t argc, char **argv)
     g_fan_manual_duty_pct = (uint8_t)d;
     fan_pwm_percent       = g_fan_manual_duty_pct;
     fccu_fan_pwm_set(fan_pwm_percent);
-    shell_print(sh, "Fan manual duty: %d%%", d);
+    fccu_settings_save();
+    shell_print(sh, "Fan manual duty: %d%% (saved)", d);
     return 0;
 }
 
@@ -174,6 +189,7 @@ int cmd_fan_auto(const struct shell *sh, size_t argc, char **argv)
     ARG_UNUSED(argc);
     ARG_UNUSED(argv);
     g_fan_manual = false;
+    fccu_settings_save();
     shell_print(sh, "fan auto  target=%.1f C", (double)g_fan_target_c);
     return 0;
 }
@@ -188,20 +204,51 @@ int cmd_fan(const struct shell *sh, size_t argc, char **argv)
         shell_print(sh, "fan:  duty=%u%%  mode=auto  target=%.1f C", fan_pwm_percent,
                     (double)g_fan_target_c);
     }
-    shell_print(sh, "  target <Â°C>   Set auto target temperature");
+    shell_print(sh, "  target <C>     Set auto target temperature");
     shell_print(sh, "  duty <0-100>  Set manual duty cycle");
     shell_print(sh, "  auto          Enable auto control");
     return 0;
 }
 
 SHELL_STATIC_SUBCMD_SET_CREATE(
-    sub_fan, SHELL_CMD_ARG(target, NULL, "Set fan target temperature [Â°C]", cmd_fan_target, 2, 0),
+    sub_fan, SHELL_CMD_ARG(target, NULL, "Set fan target temperature [C]", cmd_fan_target, 2, 0),
     SHELL_CMD_ARG(duty, NULL, "Set fan manual duty [0-100]", cmd_fan_duty, 2, 0),
     SHELL_CMD(auto, NULL, "Enable auto fan control", cmd_fan_auto), SHELL_SUBCMD_SET_END);
 
 SHELL_CMD_REGISTER(fan, &sub_fan, "Fan status and control", cmd_fan);
 
-/* â”€â”€ valve â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* start / stop */
+
+int cmd_start(const struct shell *sh, size_t argc, char **argv)
+{
+    ARG_UNUSED(argc);
+    ARG_UNUSED(argv);
+    if (state == RUNNING) {
+        shell_print(sh, "Already RUNNING");
+        return 0;
+    }
+    fccu_start();
+    shell_print(sh, "RUNNING — main valve open, purge mode=periodic");
+    return 0;
+}
+
+int cmd_stop(const struct shell *sh, size_t argc, char **argv)
+{
+    ARG_UNUSED(argc);
+    ARG_UNUSED(argv);
+    if (state == STOPPED) {
+        shell_print(sh, "Already STOPPED");
+        return 0;
+    }
+    fccu_stop();
+    shell_print(sh, "STOPPED — main valve closed, purge mode=manual");
+    return 0;
+}
+
+SHELL_CMD_REGISTER(start, NULL, "Start system (main valve on, periodic purge)", cmd_start);
+SHELL_CMD_REGISTER(stop, NULL, "Stop system (main valve off, manual purge)", cmd_stop);
+
+/* valve */
 
 int cmd_valve_on(const struct shell *sh, size_t argc, char **argv)
 {
@@ -311,6 +358,27 @@ int cmd_purge_duration(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
+int cmd_purge_fc_v(const struct shell *sh, size_t argc, char **argv)
+{
+    if (argc < 2) {
+        shell_print(sh, "purge fc_v source: %s  (threshold uses %.3f V now)",
+                    fccu_fc_v_source_name(g_fc_v_source), (double)fccu_fc_v_get());
+        shell_print(sh, "usage: purge fc_v <adc|can>");
+        return 0;
+    }
+    if (strcmp(argv[1], "adc") == 0) {
+        g_fc_v_source = FC_V_SOURCE_ADC;
+    } else if (strcmp(argv[1], "can") == 0) {
+        g_fc_v_source = FC_V_SOURCE_CAN;
+    } else {
+        shell_print(sh, "usage: purge fc_v <adc|can>");
+        return -EINVAL;
+    }
+    fccu_settings_save();
+    shell_print(sh, "Purge fc_v source: %s", fccu_fc_v_source_name(g_fc_v_source));
+    return 0;
+}
+
 int cmd_purge(const struct shell *sh, size_t argc, char **argv)
 {
     ARG_UNUSED(argc);
@@ -319,12 +387,14 @@ int cmd_purge(const struct shell *sh, size_t argc, char **argv)
                            : g_purge_mode == PURGE_MODE_PERIODIC ? "periodic"
                                                                  : "manual";
     shell_print(sh,
-                "purge_valve: state=%s  mode=%s  interval=%u s  threshold=%.2f V  duration=%u ms",
-                flags.purge_valve_on ? "open" : "closed", mode_str, g_purge_periodic_interval_s,
-                (double)g_purge_threshold_v, g_purge_duration_ms);
+                "purge_valve: state=%s  mode=%s  fc_v=%s  threshold=%.2f V  interval=%u s  duration=%u ms",
+                flags.purge_valve_on ? "open" : "closed", mode_str,
+                fccu_fc_v_source_name(g_fc_v_source), (double)g_purge_threshold_v,
+                g_purge_periodic_interval_s, g_purge_duration_ms);
     shell_print(sh, "  trigger                          Trigger purge immediately");
     shell_print(sh, "  mode <threshold|periodic|manual> Set purge trigger mode");
     shell_print(sh, "  threshold <V>                    Set FC drop threshold (V)");
+    shell_print(sh, "  fc_v <adc|can>                   FC voltage source for threshold");
     shell_print(sh, "  interval <s>                     Set periodic interval (s)");
     shell_print(sh, "  duration <ms>                    Set pulse duration (ms)");
     return 0;
@@ -334,6 +404,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
     sub_purge, SHELL_CMD(trigger, NULL, "Trigger purge immediately", cmd_purge_trigger),
     SHELL_CMD_ARG(mode, NULL, "Set purge mode [threshold|periodic|manual]", cmd_purge_mode, 2, 0),
     SHELL_CMD_ARG(threshold, NULL, "Set FC drop threshold [V]", cmd_purge_threshold, 2, 0),
+    SHELL_CMD_ARG(fc_v, NULL, "Set threshold FC voltage source [adc|can]", cmd_purge_fc_v, 2, 0),
     SHELL_CMD_ARG(interval, NULL, "Set periodic interval [s]", cmd_purge_interval, 2, 0),
     SHELL_CMD_ARG(duration, NULL, "Set pulse duration [ms]", cmd_purge_duration, 2, 0),
     SHELL_SUBCMD_SET_END);
@@ -388,8 +459,8 @@ int cmd_can(const struct shell *sh, size_t argc, char **argv)
 
     int64_t age_ms = k_uptime_get() - mcu_data.last_rx_ms;
     shell_print(sh, "MCU  (last rx: %lld ms ago)", (long long)age_ms);
-    shell_print(sh, "  fc_v:      %.3f V    fc_c:  %.4f A", (double)mcu_data.fc_v,
-                (double)mcu_data.fc_c);
+    shell_print(sh, "  fc_v:      %.3f V    fc_c:  %.4f A    hp: %.1f bar", (double)mcu_data.fc_v,
+                (double)mcu_data.fc_c, (double)mcu_data.hp_bar);
     shell_print(sh, "  sc_v:      %.3f V    sc_c:  %.4f A", (double)mcu_data.sc_v,
                 (double)mcu_data.sc_c);
     shell_print(sh, "  mc_v:      %.3f V    mc_c:  %.4f A", (double)mcu_data.mc_v,

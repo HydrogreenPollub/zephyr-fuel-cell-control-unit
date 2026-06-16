@@ -55,4 +55,12 @@ void fccu_fan_pwm_set(uint8_t pwm_percent);
  */
 uint8_t fccu_fan_compute_duty(float temp_c);
 
+/**
+ * @brief Apply fan duty saved in NVS after settings_load().
+ *
+ * When g_fan_manual is true, sets fan_pwm_percent and drives the PWM/enable
+ * GPIOs immediately so start/stop and reboot do not override manual mode.
+ */
+void fccu_fan_apply_saved();
+
 #endif /* FCCU_FAN_H */
