@@ -311,6 +311,7 @@ int cmd_purge_mode(const struct shell *sh, size_t argc, char **argv)
         shell_print(sh, "usage: purge mode <threshold|periodic|manual>");
         return -EINVAL;
     }
+    fccu_settings_save();
     shell_print(sh, "Purge mode: %s", argv[1]);
     return 0;
 }
@@ -322,6 +323,7 @@ int cmd_purge_threshold(const struct shell *sh, size_t argc, char **argv)
         return -EINVAL;
     }
     g_purge_threshold_v = strtof(argv[1], NULL);
+    fccu_settings_save();
     shell_print(sh, "Purge threshold: %.2f V drop", (double)g_purge_threshold_v);
     return 0;
 }
@@ -338,6 +340,7 @@ int cmd_purge_interval(const struct shell *sh, size_t argc, char **argv)
         return -EINVAL;
     }
     g_purge_periodic_interval_s = (uint32_t)s;
+    fccu_settings_save();
     shell_print(sh, "Purge interval: %d s", s);
     return 0;
 }
@@ -354,6 +357,7 @@ int cmd_purge_duration(const struct shell *sh, size_t argc, char **argv)
         return -EINVAL;
     }
     g_purge_duration_ms = (uint32_t)ms;
+    fccu_settings_save();
     shell_print(sh, "Purge duration: %d ms", ms);
     return 0;
 }
@@ -477,28 +481,10 @@ int cmd_reboot(const struct shell *sh, size_t argc, char **argv)
 {
     ARG_UNUSED(argc);
     ARG_UNUSED(argv);
-    fccu_settings_save();
-    shell_print(sh, "Settings saved. Rebooting...");
+    shell_print(sh, "Rebooting...");
     k_msleep(500);
     sys_reboot(SYS_REBOOT_COLD);
     return 0;
 }
 
 SHELL_CMD_REGISTER(reboot, NULL, "Reboot the device", cmd_reboot);
-
-/* â”€â”€ settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-
-int cmd_settings_save(const struct shell *sh, size_t argc, char **argv)
-{
-    ARG_UNUSED(argc);
-    ARG_UNUSED(argv);
-    fccu_settings_save();
-    shell_print(sh, "settings saved to flash");
-    return 0;
-}
-
-SHELL_STATIC_SUBCMD_SET_CREATE(sub_settings,
-                               SHELL_CMD(save, NULL, "Save settings to flash", cmd_settings_save),
-                               SHELL_SUBCMD_SET_END);
-
-SHELL_CMD_REGISTER(settings, &sub_settings, "Persist settings to flash", NULL);

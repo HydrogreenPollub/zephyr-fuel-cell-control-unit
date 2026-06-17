@@ -31,8 +31,8 @@ void fccu_settings_init();
  * @brief Persist current purge and fan settings to NVS flash.
  *
  * Saves: purge mode, interval, duration, threshold; fan manual flag,
- * target temperature, and manual duty cycle. Call from the `settings save`
- * shell command.
+ * target temperature, and manual duty cycle. Called automatically from
+ * shell commands that modify those values.
  */
 void fccu_settings_save();
 
