@@ -1,6 +1,4 @@
 #include "fccu_flow.h"
-#include "can.h"
-#include "candef.h"
 
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/logging/log.h>
@@ -42,16 +40,4 @@ void fccu_flow_on_tick()
     uint32_t pulses = (uint32_t)atomic_set(&pulse_count, 0);
     flow_rate_lnmin = pulses * FLOW_LN_PER_PULSE * 60.0f;
     flow_total_ln += pulses * FLOW_LN_PER_PULSE;
-}
-
-void fccu_flow_can_send()
-{
-    struct {
-        uint32_t rate_mln_min;
-        uint32_t total_mln;
-    } payload = {
-        .rate_mln_min = (uint32_t)(flow_rate_lnmin * 1000.0f),
-        .total_mln    = (uint32_t)(flow_total_ln * 1000.0f),
-    };
-    can_send_(can.can_device, CANDEF_FCCU_FLOW_FRAME_ID, (uint8_t *)&payload, sizeof(payload));
 }

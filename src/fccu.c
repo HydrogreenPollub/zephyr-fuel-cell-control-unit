@@ -18,7 +18,6 @@ volatile fccu_flags_t flags;
 volatile fccu_state_t state = STOPPED;
 
 static uint32_t purge_periodic_ticks;
-static uint32_t status_can_ticks;
 static uint32_t ads_can_ticks = FCCU_CAN_ADS_PERIOD_S - 1U;
 
 fccu_fc_v_source_t g_fc_v_source = FC_V_SOURCE_ADC;
@@ -107,8 +106,7 @@ bool fccu_fc_v_valid()
     if (g_fc_v_source == FC_V_SOURCE_ADC) {
         return true;
     }
-    return mcu_data.last_rx_ms != 0 &&
-           (k_uptime_get() - mcu_data.last_rx_ms) < FC_V_CAN_STALE_MS;
+    return mcu_data.last_rx_ms != 0 && (k_uptime_get() - mcu_data.last_rx_ms) < FC_V_CAN_STALE_MS;
 }
 
 float fccu_fc_v_get()
@@ -149,15 +147,9 @@ void fccu_process_measurements()
 
     if (++ads_can_ticks >= FCCU_CAN_ADS_PERIOD_S) {
         fccu_ads1015_read();
+        fccu_adc_can_send();
         fccu_ads1015_can_send();
         ads_can_ticks = 0;
-    }
-
-    if (++status_can_ticks >= FCCU_CAN_STATUS_PERIOD_S) {
-        fccu_adc_can_send();
-        fccu_bmp280_can_send();
-        fccu_flow_can_send();
-        status_can_ticks = 0;
     }
 
     if (state == RUNNING && !flags.purge_valve_on) {
@@ -167,8 +159,8 @@ void fccu_process_measurements()
             float fc_now = fccu_fc_v_get();
             if (fccu_fc_v_valid() && fccu_log_get_fc_ago(PURGE_COMPARE_SAMPLES, &fc_past) &&
                 fc_past - fc_now >= g_purge_threshold_v) {
-                LOG_INF("Threshold purge: FC drop %.2f V (source=%s)",
-                        (double)(fc_past - fc_now), fccu_fc_v_source_name(g_fc_v_source));
+                LOG_INF("Threshold purge: FC drop %.2f V (source=%s)", (double)(fc_past - fc_now),
+                        fccu_fc_v_source_name(g_fc_v_source));
                 fccu_purge_valve_on();
             }
             break;
@@ -217,13 +209,13 @@ static void measurements_work_fn(struct k_work *work)
 void fccu_can_send_state()
 {
     struct candef_fccu_state_t msg = {
-        .running_state = (uint8_t)state,
-        .main_valve    = flags.main_valve_on ? 1u : 0u,
-        .purge_mode    = (uint8_t)g_purge_mode,
-        .fan_mode      = g_fan_manual ? 0u : 1u,
-        .fan_duty      = fan_pwm_percent,
-        .fc_temp_c     = (int16_t)(adc.temp_c * 10.0f),
-        .h2_flow       = (uint16_t)(flow_rate_lnmin * 1000.0f),
+        .state      = candef_fccu_state_state_encode((double)state),
+        .main_valve = candef_fccu_state_main_valve_encode(flags.main_valve_on ? 1.0 : 0.0),
+        .purge_mode = candef_fccu_state_purge_mode_encode((double)g_purge_mode),
+        .fan_mode   = candef_fccu_state_fan_mode_encode(g_fan_manual ? 0.0 : 1.0),
+        .fan_duty   = candef_fccu_state_fan_duty_encode((double)fan_pwm_percent),
+        .purge_interval_s =
+            candef_fccu_state_purge_interval_s_encode((double)g_purge_periodic_interval_s),
     };
     uint8_t buf[CANDEF_FCCU_STATE_LENGTH];
     candef_fccu_state_pack(buf, &msg, sizeof(buf));
@@ -285,6 +277,7 @@ void fccu_on_tick()
     if (now_ms - fast_can_last_ms >= FCCU_CAN_FAST_PERIOD_MS) {
         fccu_can_send_state();
         fccu_hydrogen_can_send();
+        fccu_environment_can_send();
         fast_can_last_ms = now_ms;
     }
 

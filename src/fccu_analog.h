@@ -97,6 +97,6 @@ void fccu_bmp280_sensor_read();
  */
 void fccu_bmp280_sensor2_read();
 
-void fccu_bmp280_can_send();
+void fccu_environment_can_send();
 
 #endif /* FCCU_ANALOG_H */

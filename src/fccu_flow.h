@@ -12,7 +12,7 @@ extern float flow_total_ln; /**< Accumulated total flow volume in normalised lit
  *
  * Sets up the flow-pulse-gpios pin defined in the devicetree zephyr,user node
  * as an input with a falling-edge interrupt. The ISR increments an atomic
- * pulse counter on each detected pulse from the Vögtlin flowmeter.
+ * pulse counter on each detected pulse from the Vogtlin flowmeter.
  */
 void fccu_flow_init();
 
@@ -24,14 +24,5 @@ void fccu_flow_init();
  * Should be called exactly once per second from the 1 Hz measurement tick.
  */
 void fccu_flow_on_tick();
-
-/**
- * @brief Send a FCCU_FLOW CAN frame at ID 0x505.
- *
- * Packs the current flow rate and accumulated total into an 8-byte frame:
- * bytes 0–3 contain the rate in units of 0.001 Ln/min and bytes 4–7 contain
- * the total in units of 0.001 Ln, both encoded as little-endian uint32_t.
- */
-void fccu_flow_can_send();
 
 #endif /* FCCU_FLOW_H */
